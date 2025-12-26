@@ -10,11 +10,20 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { Link } from 'react-router-dom'
+import html2canvas from 'html2canvas'
 import {
   useCaptureStore,
   type DetectionBoxInput,
   type LabelDraft,
 } from '../state/capture-store'
+import {
+  detectObjects,
+  generateDescription,
+  generateLabel,
+  generatePixelImage,
+  saveArtwork,
+  type SaveArtworkPayload,
+} from '../api/client'
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
@@ -28,29 +37,21 @@ const descriptionPool = [
   '轻轻摇晃能听到松散的谷粒声，像在低语。',
 ]
 
-const randomBetween = (min: number, max: number) => Math.random() * (max - min) + min
+const PAGE_SIZE = 20
 
-const createMockBoxes = (): DetectionBoxInput[] => {
-  const count = 3 + Math.floor(Math.random() * 3)
-  const boxes: DetectionBoxInput[] = []
-
-  for (let index = 0; index < count; index += 1) {
-    const isLargest = index === 0
-    const width = isLargest ? randomBetween(0.44, 0.58) : randomBetween(0.2, 0.35)
-    const height = isLargest ? randomBetween(0.32, 0.48) : randomBetween(0.16, 0.32)
-    const x = randomBetween(0.04, 0.96 - width)
-    const y = randomBetween(0.06, 0.95 - height)
-
-    boxes.push({
-      id: `box-${index + 1}`,
-      label: isLargest ? '最大物体' : '物体',
-      bounds: { x, y, width, height },
-      confidence: randomBetween(0.55, 0.92),
-    })
-  }
-
-  return boxes
-}
+const fileToDataUrl = (file: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+      } else {
+        reject(new Error('无法读取文件'))
+      }
+    }
+    reader.onerror = (error) => reject(error)
+    reader.readAsDataURL(file)
+  })
 
 const defaultTime = (): LabelDraft['time'] => {
   const now = new Date()
@@ -64,17 +65,18 @@ const defaultTime = (): LabelDraft['time'] => {
 
 const buildInitialDraft = (box: DetectionBoxInput, index: number): LabelDraft => {
   const category = categoryOptions[index % categoryOptions.length]
-  const description = descriptionPool[index % descriptionPool.length]
   const x = clamp(box.bounds.x + box.bounds.width * 0.65, 0.16, 0.84)
   const y = clamp(box.bounds.y + box.bounds.height + 0.12, 0.22, 0.9)
 
   return {
-    name: namePool[index % namePool.length],
+    name: box.label || namePool[index % namePool.length],
     category,
-    description,
+    description: '',
     energy: 60 + Math.floor(Math.random() * 60),
     health: 40 + Math.floor(Math.random() * 60),
     time: defaultTime(),
+    timePosition: { xPercent: 0.83, yPercent: 0.14 },
+    timeScale: 1,
     tagPosition: { xPercent: x, yPercent: y },
     tagScale: 1,
   }
@@ -157,14 +159,6 @@ const pixelateFromUrl = async (url: string, blockSize = 10) => {
   return upCanvas.toDataURL('image/png')
 }
 
-const simulateNanoBanana = async (url: string) => {
-  await new Promise((resolve) => setTimeout(resolve, 600 + Math.random() * 600))
-  if (Math.random() < 0.2) {
-    throw new Error('模型超时')
-  }
-  return pixelateFromUrl(url, 8)
-}
-
 const formatTime = (hour: number, minute: number) => {
   const suffix = hour < 12 ? '上午' : '下午'
   const displayHour = hour % 12 === 0 ? 12 : hour % 12
@@ -177,6 +171,7 @@ const CapturePage = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const previewRef = useRef<HTMLDivElement | null>(null)
   const tagRef = useRef<HTMLDivElement | null>(null)
+  const timeRef = useRef<HTMLDivElement | null>(null)
   const previewUrlRef = useRef<string | null>(null)
   const pixelPreviewRef = useRef<string | null>(null)
   const taskRef = useRef(0)
@@ -187,8 +182,14 @@ const CapturePage = () => {
   const [isGeneratingPixel, setIsGeneratingPixel] = useState(false)
   const [generationNote, setGenerationNote] = useState<string | null>(null)
   const [descriptionLoading, setDescriptionLoading] = useState(false)
+  const [nameLoading, setNameLoading] = useState(false)
   const [resizeInfo, setResizeInfo] = useState<{ width: number; height: number } | null>(null)
   const [tagDragging, setTagDragging] = useState(false)
+  const [detecting, setDetecting] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [objectPage, setObjectPage] = useState(0)
+  const [timeDragging, setTimeDragging] = useState(false)
+  const describedRef = useRef<Set<string>>(new Set())
 
   const uploadFile = useCaptureStore((state) => state.uploadFile)
   const previewUrl = useCaptureStore((state) => state.previewUrl)
@@ -223,6 +224,21 @@ const CapturePage = () => {
   }, [pixelPreviewUrl])
 
   useEffect(() => {
+    setObjectPage(0)
+  }, [detectionBoxes.length])
+
+  useEffect(() => {
+    if (!selectedBoxId) return
+    const index = detectionBoxes.findIndex((box) => box.id === selectedBoxId)
+    if (index >= 0) {
+      const targetPage = Math.floor(index / PAGE_SIZE)
+      if (targetPage !== objectPage) {
+        setObjectPage(targetPage)
+      }
+    }
+  }, [detectionBoxes, objectPage, selectedBoxId])
+
+  useEffect(() => {
     return () => {
       if (previewUrlRef.current && previewUrlRef.current.startsWith('blob:')) {
         URL.revokeObjectURL(previewUrlRef.current)
@@ -238,20 +254,25 @@ const CapturePage = () => {
   }
 
   const runPixelPreview = useCallback(
-    async (sourceUrl: string, taskId: number) => {
+    async (imageBase64: string, taskId: number) => {
       setIsGeneratingPixel(true)
-      setGenerationNote('Nano Banana 生图中...')
+      setGenerationNote('正在生成像素风...')
       try {
-        const result = await simulateNanoBanana(sourceUrl)
+        const result = await generatePixelImage(imageBase64)
         if (taskRef.current !== taskId) return
-        setPixelPreviewUrl(result)
-        setGenerationNote(null)
+        setPixelPreviewUrl(result.image_base64)
+        if (result.source === 'fallback') {
+          setGenerationNote(result.note || '生图服务未生效，已使用本地像素化')
+        } else {
+          setGenerationNote(null)
+        }
       } catch (error) {
         if (taskRef.current !== taskId) return
-        const fallback = await pixelateFromUrl(sourceUrl, 12)
+        const fallback = await pixelateFromUrl(imageBase64, 12)
         setPixelPreviewUrl(fallback)
-        setGenerationNote('模型有点忙，已切换本地像素滤镜兜底')
-        console.error('Nano Banana 生成失败，使用本地像素滤镜回退', error)
+        const message = error instanceof Error ? error.message.replace(/^Error:\s*/i, '') : String(error)
+        setGenerationNote(`生图服务返回错误：${message || '已用本地像素化兜底'}`)
+        console.error('生图生成失败，使用本地像素化回退', error)
       } finally {
         if (taskRef.current === taskId) {
           setIsGeneratingPixel(false)
@@ -275,21 +296,47 @@ const CapturePage = () => {
       setUploadError(null)
       setPixelPreviewUrl(null)
       setResizeInfo(null)
+      setSaveMessage(null)
+      setDetecting(true)
       resetCapture()
+      describedRef.current.clear()
 
       try {
         const resized = await resizeImageToBounds(file)
         if (taskRef.current !== newTaskId) return
 
+        const dataUrl = await fileToDataUrl(resized.file)
+        if (taskRef.current !== newTaskId) return
+
         setResizeInfo({ width: resized.width, height: resized.height })
-        setUpload(resized.file, resized.url)
-        const boxes = createMockBoxes()
-        setDetectionBoxes(boxes)
-        boxes.forEach((box, index) => {
+        setUpload(resized.file, dataUrl)
+        setSaveStatus('idle')
+
+        const detectPromise = detectObjects(dataUrl, 20)
+        const pixelPromise = runPixelPreview(dataUrl, newTaskId)
+
+        const detectResult = await detectPromise
+        if (taskRef.current !== newTaskId) return
+
+        if (!detectResult.boxes.length) {
+          setDetectionBoxes([])
+          setUploadError('没看清…换张更清晰的照片试试？')
+          return
+        }
+
+        setDetectionBoxes(
+          detectResult.boxes.map((box) => ({
+            id: box.id,
+            label: box.label,
+            confidence: box.confidence,
+            bounds: box.bounds,
+          })),
+        )
+        detectResult.boxes.forEach((box, index) => {
           updateLabelDraft(box.id, buildInitialDraft(box, index))
         })
-        setSaveStatus('idle')
-        await runPixelPreview(resized.url, newTaskId)
+        setObjectPage(0)
+        await pixelPromise
       } catch (error) {
         if (taskRef.current === newTaskId) {
           setUploadError('处理图片时出了点小差，换一张试试吧')
@@ -297,6 +344,10 @@ const CapturePage = () => {
           setSaveStatus('idle')
           setGenerationNote(null)
           console.error('压缩或生成预览失败', error)
+        }
+      } finally {
+        if (taskRef.current === newTaskId) {
+          setDetecting(false)
         }
       }
     },
@@ -337,10 +388,50 @@ const CapturePage = () => {
 
   const displayedPreview = pixelPreviewUrl ?? previewUrl
 
-  const handleNameSuggestion = () => {
-    if (!selectedBoxId) return
-    const nextName = namePool[Math.floor(Math.random() * namePool.length)]
-    updateLabelDraft(selectedBoxId, { name: nextName })
+  const totalPages = Math.max(1, Math.ceil((detectionBoxes.length || 1) / PAGE_SIZE))
+  const currentPage = Math.min(objectPage, totalPages - 1)
+  const pagedBoxes = detectionBoxes.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE)
+  const selectedBox = selectedBoxId ? detectionBoxes.find((box) => box.id === selectedBoxId) : null
+  const displayedBoxes =
+    selectedBox && !pagedBoxes.some((box) => box.id === selectedBoxId)
+      ? [...pagedBoxes, selectedBox]
+      : pagedBoxes
+
+  const runDescriptionGeneration = async (name: string, category: string, boxId: string | null) => {
+    setDescriptionLoading(true)
+    try {
+      const descriptor = await generateDescription(name || '这件物品', category || '杂物')
+      if (boxId) {
+        updateLabelDraft(boxId, { description: descriptor.description })
+        describedRef.current.add(boxId)
+      }
+    } catch (error) {
+      const fallback = descriptionPool[Math.floor(Math.random() * descriptionPool.length)]
+      if (boxId) {
+        updateLabelDraft(boxId, { description: fallback })
+        describedRef.current.add(boxId)
+      }
+      console.error('文案生成失败，使用模板兜底', error)
+    } finally {
+      setDescriptionLoading(false)
+    }
+  }
+
+  const handleNameSuggestion = async () => {
+    if (!selectedBoxId || !selectedBox || !previewUrl || nameLoading) return
+    setNameLoading(true)
+    try {
+      const result = await generateLabel(previewUrl, selectedBox.bounds, selectedBox.label)
+      const nextName = result.label?.trim() || selectedDraft?.name || selectedBox.label || ''
+      if (nextName) {
+        updateLabelDraft(selectedBoxId, { name: nextName })
+        await runDescriptionGeneration(nextName, selectedDraft?.category || '杂物', selectedBoxId)
+      }
+    } catch (error) {
+      console.error('取名失败，保留原名', error)
+    } finally {
+      setNameLoading(false)
+    }
   }
 
   const handleCategoryChange = (category: string) => {
@@ -349,12 +440,8 @@ const CapturePage = () => {
   }
 
   const handleDescriptionGenerate = async () => {
-    if (!selectedBoxId) return
-    setDescriptionLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 480))
-    const descriptor = descriptionPool[Math.floor(Math.random() * descriptionPool.length)]
-    updateLabelDraft(selectedBoxId, { description: descriptor })
-    setDescriptionLoading(false)
+    if (!selectedBoxId || !selectedDraft) return
+    await runDescriptionGeneration(selectedDraft.name || '这件物品', selectedDraft.category || '杂物', selectedBoxId)
   }
 
   const handleStatChange = (field: 'energy' | 'health', value: number) => {
@@ -384,6 +471,17 @@ const CapturePage = () => {
     if (!selectedBoxId) return
     updateLabelDraft(selectedBoxId, { time: defaultTime() })
   }
+
+  // 自动补充描述：首次选中某个框且描述为空/模板时自动生成
+  useEffect(() => {
+    if (!selectedBoxId || !selectedDraft) return
+    const desc = (selectedDraft.description || '').trim()
+    const isPlaceholder =
+      !desc || descriptionPool.includes(desc) || desc.startsWith('在这里写下物品的故事')
+    if (isPlaceholder && !describedRef.current.has(selectedBoxId)) {
+      void runDescriptionGeneration(selectedDraft.name || '这件物品', selectedDraft.category || '杂物', selectedBoxId)
+    }
+  }, [selectedBoxId, selectedDraft, runDescriptionGeneration])
 
   const handleTagPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!selectedBoxId || !previewRef.current || !tagRef.current || !selectedDraft) return
@@ -463,17 +561,144 @@ const CapturePage = () => {
     window.addEventListener('pointerup', handleUp)
   }
 
-  const handleSave = () => {
-    if (!displayedPreview || detectionBoxes.length === 0) return
-    setSaveStatus('saving')
-    setTimeout(() => {
-      setSaveStatus('success')
-    }, 600)
+  const handleTimePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!selectedBoxId || !previewRef.current || !timeRef.current || !selectedDraft) return
+    event.preventDefault()
+    const containerRect = previewRef.current.getBoundingClientRect()
+    const timeRect = timeRef.current.getBoundingClientRect()
+    const startX = event.clientX
+    const startY = event.clientY
+    const startPos = selectedDraft.timePosition ?? { xPercent: 0.83, yPercent: 0.14 }
+
+    const halfWidthPercent = (timeRect.width / containerRect.width) / 2
+    const halfHeightPercent = (timeRect.height / containerRect.height) / 2
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - startX
+      const deltaY = moveEvent.clientY - startY
+      const absoluteX = startPos.xPercent * containerRect.width + deltaX
+      const absoluteY = startPos.yPercent * containerRect.height + deltaY
+      const nextXPercent = clamp(absoluteX / containerRect.width, halfWidthPercent, 1 - halfWidthPercent)
+      const nextYPercent = clamp(absoluteY / containerRect.height, halfHeightPercent, 1 - halfHeightPercent)
+      updateLabelDraft(selectedBoxId, {
+        timePosition: { xPercent: nextXPercent, yPercent: nextYPercent },
+      })
+    }
+
+    const handleUp = () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+      setTimeDragging(false)
+    }
+
+    setTimeDragging(true)
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
   }
 
-  const canSave = detectionBoxes.length > 0 && !!displayedPreview && !isGeneratingPixel
+  const handleTimeScaleHandleDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!selectedBoxId || !previewRef.current || !timeRef.current || !selectedDraft) return
+    event.preventDefault()
+    event.stopPropagation()
+    const containerRect = previewRef.current.getBoundingClientRect()
+    const timeRect = timeRef.current.getBoundingClientRect()
+    const startScale = selectedDraft.timeScale ?? 1
+    const baseWidth = timeRect.width / startScale
+    const baseHeight = timeRect.height / startScale
+    const startX = event.clientX
+    const startY = event.clientY
+
+    const handleMove = (moveEvent: PointerEvent) => {
+      const delta = (moveEvent.clientX - startX + (moveEvent.clientY - startY)) / 220
+      const nextScale = clamp(startScale + delta, 0.7, 1.6)
+      const scaledWidth = baseWidth * nextScale
+      const scaledHeight = baseHeight * nextScale
+      const halfWidthPercent = scaledWidth / containerRect.width / 2
+      const halfHeightPercent = scaledHeight / containerRect.height / 2
+
+      const currentPos = useCaptureStore.getState().labelDrafts[selectedBoxId]?.timePosition ?? {
+        xPercent: 0.83,
+        yPercent: 0.14,
+      }
+
+      const clampedX = clamp(currentPos.xPercent, halfWidthPercent, 1 - halfWidthPercent)
+      const clampedY = clamp(currentPos.yPercent, halfHeightPercent, 1 - halfHeightPercent)
+
+      updateLabelDraft(selectedBoxId, {
+        timeScale: nextScale,
+        timePosition: { xPercent: clampedX, yPercent: clampedY },
+      })
+    }
+
+    const handleUp = () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+  }
+
+  const capturePreview = useCallback(async () => {
+    if (!previewRef.current) return null
+    const canvas = await html2canvas(previewRef.current, {
+      backgroundColor: null,
+      scale: 1,
+      useCORS: true,
+      allowTaint: true,
+      ignoreElements: (element) =>
+        element instanceof HTMLElement && element.dataset.captureIgnore === 'true',
+    })
+    return canvas.toDataURL('image/png')
+  }, [])
+
+  const handleSave = async () => {
+    if (!pixelPreviewUrl || detectionBoxes.length === 0 || !selectedBoxId || !selectedDraft) return
+    const selectedBox = detectionBoxes.find((box) => box.id === selectedBoxId)
+    setSaveStatus('saving')
+    setSaveMessage(null)
+    let composedImage: string | null = null
+    try {
+      composedImage = await capturePreview()
+    } catch (error) {
+      console.error('捕捉预览失败，使用后端合成', error)
+    }
+    const payload: SaveArtworkPayload = {
+      user_id: 'guest',
+      base_image: pixelPreviewUrl,
+      composed_image: composedImage ?? undefined,
+      label: {
+        name: selectedDraft.name || '未命名物品',
+        category: selectedDraft.category || '杂物',
+        description: selectedDraft.description || '在这里写下物品的故事。',
+        energy: selectedDraft.energy,
+        health: selectedDraft.health,
+        time: selectedDraft.time ?? defaultTime(),
+        tag_position: {
+          x_percent: selectedDraft.tagPosition?.xPercent ?? 0.5,
+          y_percent: selectedDraft.tagPosition?.yPercent ?? 0.5,
+        },
+        tag_scale: selectedDraft.tagScale ?? 1,
+      },
+      box_bounds: selectedBox?.bounds,
+    }
+
+    try {
+      await saveArtwork(payload)
+      setSaveStatus('success')
+      setSaveMessage('已放入珍藏！')
+    } catch (error) {
+      setSaveStatus('error')
+      setSaveMessage('没能放进珍藏…再试一次？')
+      console.error('保存失败', error)
+    }
+  }
+
+  const canSave = detectionBoxes.length > 0 && !!pixelPreviewUrl && !isGeneratingPixel && !detecting
 
   const timeState = selectedDraft?.time ?? defaultTime()
+  const timePosition = selectedDraft?.timePosition ?? { xPercent: 0.83, yPercent: 0.14 }
+  const timeScale = selectedDraft?.timeScale ?? 1
   const hourAngle = ((timeState.hour % 12) + timeState.minute / 60) * 30
   const minuteAngle = timeState.minute * 6
 
@@ -484,7 +709,7 @@ const CapturePage = () => {
           <p className="eyebrow">捕物界面</p>
           <h1>像素预览与三联动</h1>
           <p className="lede">
-            上传后自动压缩到 720–1600px，调用 Nano Banana 模型生成像素预览；识别 mock 框默认选中最大物体，物品栏/框/表单实时联动，便签可拖拽缩放且不越界。
+            上传后自动压缩到 720–1600px，后端生图 + 阿里云识别默认选中最大物体，物品栏/框/表单实时联动，便签可拖拽缩放且不越界。
           </p>
         </div>
         <Link className="ghost-button return-button" to="/">
@@ -530,24 +755,26 @@ const CapturePage = () => {
                   )}
 
                   <div className="box-layer">
-                    {detectionBoxes.map((box) => (
-                      <button
-                        key={box.id}
-                        type="button"
-                        className={`box-outline ${box.id === selectedBoxId ? 'active' : ''}`}
-                        style={{
-                          top: `${box.bounds.y * 100}%`,
-                          left: `${box.bounds.x * 100}%`,
-                          width: `${box.bounds.width * 100}%`,
-                          height: `${box.bounds.height * 100}%`,
-                        }}
-                        onClick={() => selectBox(box.id)}
-                      >
-                        <span className="box-label">
-                          {box.label ?? '物体'} · {((box.confidence ?? 0.8) * 100).toFixed(0)}%
-                        </span>
-                      </button>
-                    ))}
+                    {displayedBoxes.map((box) => {
+                      const draftName = labelDrafts[box.id]?.name?.trim()
+                      const displayName = draftName || box.label || '物体'
+                      return (
+                        <button
+                          key={box.id}
+                          type="button"
+                          className={`box-outline ${box.id === selectedBoxId ? 'active' : ''}`}
+                          style={{
+                            top: `${box.bounds.y * 100}%`,
+                            left: `${box.bounds.x * 100}%`,
+                            width: `${box.bounds.width * 100}%`,
+                            height: `${box.bounds.height * 100}%`,
+                          }}
+                          onClick={() => selectBox(box.id)}
+                        >
+                          <span className="box-label">{displayName}</span>
+                        </button>
+                      )
+                    })}
                   </div>
 
                   {selectedDraft && (
@@ -589,7 +816,16 @@ const CapturePage = () => {
                   )}
 
                   {displayedPreview && (
-                    <div className="time-coin-placeholder">
+                    <div
+                      ref={timeRef}
+                      className={`time-coin-placeholder ${timeDragging ? 'dragging' : ''}`}
+                      style={{
+                        left: `${timePosition.xPercent * 100}%`,
+                        top: `${timePosition.yPercent * 100}%`,
+                        transform: `translate(-50%, -50%) scale(${timeScale})`,
+                      }}
+                      onPointerDown={handleTimePointerDown}
+                    >
                       <div className="time-widget">
                         <div className="time-meta">
                           <span className="time-day">
@@ -604,20 +840,36 @@ const CapturePage = () => {
                         </div>
                       </div>
                       <div className="coin-chip">88888888</div>
+                      <div className="time-handle" onPointerDown={handleTimeScaleHandleDown}>
+                        ⤢
+                      </div>
                     </div>
                   )}
 
                   {isGeneratingPixel && (
-                    <div className="preview-status floating">
+                    <div className="preview-status floating" data-capture-ignore="true">
                       <span className="status-dot" />
                       正在生成像素预览...
                     </div>
                   )}
 
-                  {generationNote && <div className="preview-status subtle">{generationNote}</div>}
-                  {uploadError && <div className="upload-error">{uploadError}</div>}
+                  {detecting && (
+                    <div className="preview-status subtle" data-capture-ignore="true">
+                      正在识别物体...
+                    </div>
+                  )}
+                  {generationNote && (
+                    <div className="preview-status subtle" data-capture-ignore="true">
+                      {generationNote}
+                    </div>
+                  )}
+                  {uploadError && (
+                    <div className="upload-error" data-capture-ignore="true">
+                      {uploadError}
+                    </div>
+                  )}
                   {uploadFile && (
-                    <div className="upload-file-info">
+                    <div className="upload-file-info" data-capture-ignore="true">
                       <span className="file-name">
                         {uploadFile.name}
                         {resizeInfo ? ` · ${resizeInfo.width}×${resizeInfo.height}` : ''}
@@ -661,8 +913,13 @@ const CapturePage = () => {
                             onChange={(event) => updateLabelDraft(selectedBoxId!, { name: event.target.value })}
                             placeholder="给物品起个星露谷名字"
                           />
-                          <button className="mini-chip" type="button" onClick={handleNameSuggestion}>
-                            取名
+                          <button
+                            className="mini-chip"
+                            type="button"
+                            onClick={handleNameSuggestion}
+                            disabled={nameLoading || !previewUrl}
+                          >
+                            {nameLoading ? '取名中…' : '取名'}
                           </button>
                         </div>
                       </div>
@@ -828,39 +1085,53 @@ const CapturePage = () => {
         </div>
 
         <section className="object-bar">
-              <div className="object-bar-header">
-                <span>物品栏</span>
-                <span className="helper-text">
-                  {detectionBoxes.length > 0 ? `识别到 ${detectionBoxes.length} 个物体` : '等待识别结果'}
-                </span>
-              </div>
-          <div className="object-grid">
-            {detectionBoxes.map((box, index) => (
-              <button
-                key={box.id}
-                type="button"
-                className={`object-slot ${box.id === selectedBoxId ? 'active' : ''}`}
-                onClick={() => selectBox(box.id)}
-              >
-                <div
-                  className="slot-thumb with-progress"
-                  style={
-                    displayedPreview
-                      ? {
-                          backgroundImage: `url(${displayedPreview})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }
-                      : undefined
-                  }
+          <div className="object-bar-header">
+            <span>物品栏</span>
+            <span className="helper-text">
+              {detectionBoxes.length > 0
+                ? `识别到 ${detectionBoxes.length} 个物体 · 第 ${currentPage + 1}/${totalPages} 页`
+                : '等待识别结果'}
+            </span>
+            {detectionBoxes.length > PAGE_SIZE && (
+              <div className="pager">
+                <button
+                  className="mini-chip ghost"
+                  type="button"
+                  onClick={() => setObjectPage((page) => Math.max(0, page - 1))}
+                  disabled={currentPage === 0}
                 >
-                  <div className="slot-progress" style={{ width: `${Math.min(100, (box.confidence ?? 0.8) * 100)}%` }} />
-                  <span className="slot-index">#{index + 1}</span>
-                </div>
-                <div className="slot-label">{labelDrafts[box.id]?.name || '未命名'}</div>
-                <div className="slot-hint">{box.id === selectedBoxId ? '当前选中' : '点击切换'}</div>
-              </button>
-            ))}
+                  上一页
+                </button>
+                <button
+                  className="mini-chip ghost"
+                  type="button"
+                  onClick={() => setObjectPage((page) => Math.min(totalPages - 1, page + 1))}
+                  disabled={currentPage >= totalPages - 1}
+                >
+                  下一页
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="object-grid">
+            {pagedBoxes.map((box, index) => {
+              const displayIndex = index + 1 + currentPage * PAGE_SIZE
+              const displayName = labelDrafts[box.id]?.name || box.label || '未命名'
+              return (
+                <button
+                  key={box.id}
+                  type="button"
+                  className={`object-slot ${box.id === selectedBoxId ? 'active' : ''}`}
+                  onClick={() => selectBox(box.id)}
+                >
+                  <div className="slot-thumb minimal">
+                    <span className="slot-index">#{displayIndex}</span>
+                  </div>
+                  <div className="slot-label">{displayName}</div>
+                  <div className="slot-hint">{box.id === selectedBoxId ? '当前已选中' : '点击切换'}</div>
+                </button>
+              )
+            })}
           </div>
         </section>
 
@@ -873,6 +1144,7 @@ const CapturePage = () => {
           >
             {saveStatus === 'saving' ? '保存中...' : saveStatus === 'success' ? '已保存' : '保存至珍藏箱'}
           </button>
+          {saveMessage && <div className={`save-hint ${saveStatus === 'error' ? 'error' : 'success'}`}>{saveMessage}</div>}
         </div>
       </div>
     </div>

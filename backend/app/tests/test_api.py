@@ -29,8 +29,18 @@ def _make_base64_image(color=(180, 120, 80), size=(64, 48)) -> str:
 def client(tmp_path):
   storage_dir = tmp_path / "storage"
   os.environ["LOCAL_STORAGE_DIR"] = str(storage_dir)
-  os.environ.pop("IMAGE_GEN_ENDPOINT", None)
-  os.environ.pop("IMAGE_GEN_KEY", None)
+  os.environ["IMAGE_GEN_ENDPOINT"] = ""
+  os.environ["IMAGE_GEN_KEY"] = ""
+  os.environ["ALIYUN_ACCESS_KEY_ID"] = ""
+  os.environ["ALIYUN_ACCESS_KEY_SECRET"] = ""
+  os.environ["ALIYUN_REGION"] = ""
+  os.environ["ALIYUN_ENDPOINT"] = ""
+  os.environ["AZURE_CV_ENDPOINT"] = ""
+  os.environ["AZURE_CV_KEY"] = ""
+  os.environ["TEXT_GEN_ENDPOINT"] = ""
+  os.environ["TEXT_GEN_KEY"] = ""
+  os.environ["SUPABASE_URL"] = ""
+  os.environ["SUPABASE_KEY"] = ""
 
   # reset cached singletons to use the temp storage dir
   get_settings.cache_clear()
@@ -145,6 +155,11 @@ def test_save_artwork_deterministic(client: TestClient):
 
   list_response = client.get("/artworks")
   assert list_response.status_code == 200
-  items = list_response.json()["items"]
+  data = list_response.json()
+  items = data["items"]
   assert len(items) >= 1
   assert items[0]["url"] == first_data["url"]
+  assert data.get("total") is None or data["total"] >= len(items)
+
+  paged = client.get("/artworks?limit=1&offset=1")
+  assert paged.status_code == 200

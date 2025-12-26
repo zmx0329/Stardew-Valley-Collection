@@ -157,7 +157,8 @@
 
 .collection-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 260px));
+  justify-content: start;
   gap: 1rem;
 }
 
@@ -242,6 +243,61 @@
   color: #4b2e1b;
   font-weight: 700;
   font-size: 0.95rem;
+}
+
+.collection-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  z-index: 20;
+}
+
+.modal-card {
+  background: #f5e7c6;
+  border: 3px solid #3a2416;
+  border-radius: 14px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+  max-width: min(900px, 90vw);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem 0 1rem;
+  font-weight: 800;
+  color: #2e1a0e;
+}
+
+.modal-body {
+  padding: 0 1rem 1rem 1rem;
+}
+
+.modal-image {
+  width: 100%;
+  border-radius: 12px;
+  border: 2px solid #b78c4d;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+.modal-meta {
+  margin-top: 0.5rem;
+  color: #5a3a1b;
+  font-weight: 700;
 }
 
 .sr-only {
@@ -681,12 +737,34 @@
 
 .time-coin-placeholder {
   position: absolute;
-  top: 8px;
-  right: 8px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 0.4rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+.time-coin-placeholder.dragging {
+  cursor: grabbing;
+}
+
+.time-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(36, 57, 84, 0.88);
+  color: #f7f2ec;
+  font-weight: 800;
+  font-size: 0.9rem;
+  border: 2px solid #0f2338;
+  cursor: nwse-resize;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.12);
 }
 
 .time-widget {
@@ -1147,6 +1225,13 @@
   border: 2px solid #9b6c2f;
 }
 
+.slot-thumb.minimal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #f3deb5, #d9b57a);
+}
+
 .slot-thumb.empty {
   opacity: 0.4;
 }
@@ -1194,6 +1279,22 @@
 
 .bottom-actions.solo {
   justify-content: flex-end;
+}
+
+.save-hint {
+  align-self: center;
+  font-weight: 700;
+  color: #355219;
+}
+
+.save-hint.error {
+  color: #8b1f1f;
+}
+
+.pager {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
 }
 
 @media (max-width: 960px) {

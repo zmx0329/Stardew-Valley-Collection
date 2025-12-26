@@ -22,6 +22,8 @@ async def save_artwork(
 
 @router.get("/artworks", response_model=ArtworksResponse)
 async def list_artworks(
-  limit: int = Query(20, ge=1, le=50), service: ArtworkService = Depends(get_artwork_service)
+  limit: int = Query(20, ge=1, le=50),
+  offset: int = Query(0, ge=0),
+  service: ArtworkService = Depends(get_artwork_service),
 ) -> ArtworksResponse:
-  return await service.list_artworks(limit)
+  return await service.list_artworks(limit, offset)

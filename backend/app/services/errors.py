@@ -18,5 +18,9 @@ class ImageGenerationError(ServiceError):
   pass
 
 
+class LabelGenerationError(ServiceError):
+  pass
+
+
 class StorageError(ServiceError):
   pass

@@ -24,8 +24,11 @@ class ArtworkService:
     )
 
   async def save_artwork(self, payload: SaveArtworkRequest) -> SaveArtworkResponse:
-    base_image_bytes = decode_base64_image(payload.base_image)
-    composed = self.image_service.compose(base_image_bytes, payload.label, payload.box_bounds)
+    if payload.composed_image:
+      composed = decode_base64_image(payload.composed_image)
+    else:
+      base_image_bytes = decode_base64_image(payload.base_image)
+      composed = self.image_service.compose(base_image_bytes, payload.label, payload.box_bounds)
 
     checksum = hashlib.sha256(composed).hexdigest()
     filename = f"artwork-{checksum}.png"
@@ -37,6 +40,11 @@ class ArtworkService:
 
     return SaveArtworkResponse(id=record_id, url=url, created_at=record.created_at, checksum=checksum)
 
-  async def list_artworks(self, limit: int = 20) -> ArtworksResponse:
-    items = await self.storage_client.list_records(limit)
-    return ArtworksResponse(items=items)
+  async def list_artworks(self, limit: int = 20, offset: int = 0) -> ArtworksResponse:
+    items = await self.storage_client.list_records(limit, offset)
+    total = None
+    try:
+      total = await self.storage_client.count_records()
+    except Exception:
+      total = None
+    return ArtworksResponse(items=items, total=total)

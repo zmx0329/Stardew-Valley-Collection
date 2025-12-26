@@ -97,27 +97,32 @@ class AliyunDetectionClient:
     )
     self.client = ObjectdetClient(config)
 
-  async def detect(self, image_bytes: bytes, image_width: int, image_height: int, max_results: int) -> list[DetectionBox]:
+  async def detect_by_url(
+    self, image_url: str, image_width: int, image_height: int, max_results: int
+  ) -> list[DetectionBox]:
     # objectdet_models is imported lazily above
     from alibabacloud_objectdet20191230 import models as objectdet_models  # type: ignore
 
-    request = objectdet_models.DetectObjectRequest(image_base64=base64.b64encode(image_bytes).decode("utf-8"))
     try:
+      request = objectdet_models.DetectObjectRequest(image_url=image_url)
       # SDK is sync; run in thread to avoid blocking event loop
       response = await anyio.to_thread.run_sync(self.client.detect_object, request)
     except Exception as exc:
-      raise DetectionError("aliyun_error", "阿里云检测失败", status_code=502) from exc
+      detail = getattr(exc, "message", None) or str(exc)
+      code = getattr(exc, "code", None)
+      if code:
+        detail = f"{detail} (code={code})"
+      raise DetectionError("aliyun_error", f"阿里云检测失败: {detail}", status_code=502) from exc
 
     elements = (response.body.data.elements or [])[:max_results]
     boxes: list[DetectionBox] = []
     for index, element in enumerate(elements):
-      rect = element.box
-      x = getattr(rect, "x", None)
-      y = getattr(rect, "y", None)
-      w = getattr(rect, "width", None)
-      h = getattr(rect, "height", None)
-      if None in (x, y, w, h):
+      coords = getattr(element, "boxes", None)
+      if not coords and hasattr(element, "to_map"):
+        coords = element.to_map().get("Boxes")
+      if not coords or len(coords) < 4:
         continue
+      x, y, w, h = coords[:4]
 
       bounds = NormalizedBounds(
         x=clamp(x / image_width, 0, 1),

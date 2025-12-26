@@ -35,10 +35,13 @@ class LocalStorageClient:
       json.dumps([r.model_dump(mode="json") for r in records], ensure_ascii=False), encoding="utf-8"
     )
 
-  async def list_records(self, limit: int = 20) -> List[ArtworkRecord]:
+  async def list_records(self, limit: int = 20, offset: int = 0) -> List[ArtworkRecord]:
     records = self._load_records()
     sorted_records = sorted(records, key=lambda r: r.created_at, reverse=True)
-    return sorted_records[:limit]
+    return sorted_records[offset : offset + limit]
+
+  async def count_records(self) -> int:
+    return len(self._load_records())
 
   def _load_records(self) -> List[ArtworkRecord]:
     raw = self.records_file.read_text(encoding="utf-8")
@@ -70,27 +73,40 @@ class SupabaseStorageClient:
     except ImportError as exc:  # pragma: no cover - library missing
       raise StorageError("supabase_import", "缺少 supabase 依赖") from exc
 
-    self.client = create_client(url, key)
+    normalized_url = url if url.endswith("/") else f"{url}/"
+    self.client = create_client(normalized_url, key)
     self.bucket = bucket
     self.table = table
 
   async def upload_image(self, filename: str, data: bytes, content_type: str = "image/png") -> str:
     try:
-      self.client.storage.from_(self.bucket).upload(filename, data, {"content-type": content_type, "upsert": True})
+      self.client.storage.from_(self.bucket).upload(
+        filename,
+        data,
+        {"content-type": content_type, "upsert": "true"},
+      )
       public_url = self.client.storage.from_(self.bucket).get_public_url(filename)
       return public_url
     except Exception as exc:  # pragma: no cover - network path not exercised in tests
-      raise StorageError("supabase_upload_failed", "Supabase 上传失败") from exc
+      raise StorageError("supabase_upload_failed", f"Supabase 上传失败: {exc}") from exc
 
   async def save_record(self, record: ArtworkRecord) -> None:
     try:
-      self.client.table(self.table).insert(record.model_dump()).execute()
+      self.client.table(self.table).insert(record.model_dump(mode="json")).execute()
     except Exception as exc:  # pragma: no cover
-      raise StorageError("supabase_insert_failed", "Supabase 记录写入失败") from exc
+      raise StorageError("supabase_insert_failed", f"Supabase 记录写入失败: {exc}") from exc
 
-  async def list_records(self, limit: int = 20) -> List[ArtworkRecord]:
+  async def list_records(self, limit: int = 20, offset: int = 0) -> List[ArtworkRecord]:
     try:
-      response = self.client.table(self.table).select("*").order("created_at", desc=True).limit(limit).execute()
+      start = max(0, offset)
+      end = max(start, start + max(1, limit) - 1)
+      response = (
+        self.client.table(self.table)
+        .select("*")
+        .order("created_at", desc=True)
+        .range(start, end)
+        .execute()
+      )
       items = response.data or []
       return [
         ArtworkRecord(
@@ -103,3 +119,10 @@ class SupabaseStorageClient:
       ]
     except Exception as exc:  # pragma: no cover
       raise StorageError("supabase_list_failed", "Supabase 读取失败") from exc
+
+  async def count_records(self) -> int:
+    try:
+      response = self.client.table(self.table).select("id", count="exact").execute()
+      return response.count or 0
+    except Exception as exc:  # pragma: no cover
+      raise StorageError("supabase_count_failed", "Supabase 计数失败") from exc

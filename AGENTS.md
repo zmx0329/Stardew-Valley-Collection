@@ -6,7 +6,7 @@ Contributor guide aligned to the PRD (`memory_bank/design_document.md`) and stac
 ## always
 - 重要提示：
 - 写任何代码前必须完整阅读 memory-bank/@architecture.md（包含完整数据库结构）
-- 写任何代码前必须完整阅读 memory-bank/@game-design-document.md
+- 写任何代码前必须完整阅读 memory-bank/@design-document.md
 - 每完成一个重大功能或里程碑后，必须更新 memory-bank/@architecture.md
 
 ## Project Structure & Module Organization

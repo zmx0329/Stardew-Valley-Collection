@@ -13,3 +13,5 @@ class ImageGenResponse(BaseModel):
   model_config = ConfigDict(extra="forbid")
 
   image_base64: str
+  source: str | None = Field(default=None, description="remote or fallback")
+  note: str | None = Field(default=None, description="optional warning when fallback is used")

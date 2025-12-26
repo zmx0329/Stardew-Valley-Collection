@@ -4,6 +4,7 @@ from .config import Settings, get_settings
 from .services.artwork_service import ArtworkService
 from .services.detection_service import DetectionService
 from .services.image_gen_service import ImageGenerationService
+from .services.label_service import LabelService
 from .services.text_service import TextService
 
 
@@ -29,3 +30,8 @@ def get_artwork_service() -> ArtworkService:
 @lru_cache(maxsize=1)
 def get_image_gen_service() -> ImageGenerationService:
   return ImageGenerationService(get_settings())
+
+
+@lru_cache(maxsize=1)
+def get_label_service() -> LabelService:
+  return LabelService(get_settings())

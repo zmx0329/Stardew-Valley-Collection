@@ -33,6 +33,11 @@ export type LabelDraft = {
   energy: number
   health: number
   time: TimeState
+  timePosition: {
+    xPercent: number
+    yPercent: number
+  }
+  timeScale: number
   tagPosition: {
     xPercent: number
     yPercent: number
@@ -71,6 +76,11 @@ const createEmptyLabelDraft = (): LabelDraft => ({
   energy: 0,
   health: 0,
   time: createDefaultTimeState(),
+  timePosition: {
+    xPercent: 0.83,
+    yPercent: 0.14,
+  },
+  timeScale: 1,
   tagPosition: {
     xPercent: 0.5,
     yPercent: 0.5,
