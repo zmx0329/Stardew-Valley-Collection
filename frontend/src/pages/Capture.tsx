@@ -1082,58 +1082,55 @@ const CapturePage = () => {
               </div>
             </div>
           </section>
-        </div>
 
-        <section className="object-bar">
-          <div className="object-bar-header">
-            <span>物品栏</span>
-            <span className="helper-text">
-              {detectionBoxes.length > 0
-                ? `识别到 ${detectionBoxes.length} 个物体 · 第 ${currentPage + 1}/${totalPages} 页`
-                : '等待识别结果'}
-            </span>
-            {detectionBoxes.length > PAGE_SIZE && (
-              <div className="pager">
-                <button
-                  className="mini-chip ghost"
-                  type="button"
-                  onClick={() => setObjectPage((page) => Math.max(0, page - 1))}
-                  disabled={currentPage === 0}
-                >
-                  上一页
-                </button>
-                <button
-                  className="mini-chip ghost"
-                  type="button"
-                  onClick={() => setObjectPage((page) => Math.min(totalPages - 1, page + 1))}
-                  disabled={currentPage >= totalPages - 1}
-                >
-                  下一页
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="object-grid">
-            {pagedBoxes.map((box, index) => {
-              const displayIndex = index + 1 + currentPage * PAGE_SIZE
-              const displayName = labelDrafts[box.id]?.name || box.label || '未命名'
-              return (
-                <button
-                  key={box.id}
-                  type="button"
-                  className={`object-slot ${box.id === selectedBoxId ? 'active' : ''}`}
-                  onClick={() => selectBox(box.id)}
-                >
-                  <div className="slot-thumb minimal">
-                    <span className="slot-index">#{displayIndex}</span>
-                  </div>
-                  <div className="slot-label">{displayName}</div>
-                  <div className="slot-hint">{box.id === selectedBoxId ? '当前已选中' : '点击切换'}</div>
-                </button>
-              )
-            })}
-          </div>
-        </section>
+          <section className="object-bar">
+            <div className="object-bar-header">
+              <span>物品栏</span>
+              <span className="helper-text">
+                {detectionBoxes.length > 0
+                  ? `识别到 ${detectionBoxes.length} 个物体 · 第 ${currentPage + 1}/${totalPages} 页`
+                  : '等待识别结果'}
+              </span>
+              {detectionBoxes.length > PAGE_SIZE && (
+                <div className="pager">
+                  <button
+                    className="mini-chip ghost"
+                    type="button"
+                    onClick={() => setObjectPage((page) => Math.max(0, page - 1))}
+                    disabled={currentPage === 0}
+                  >
+                    上一页
+                  </button>
+                  <button
+                    className="mini-chip ghost"
+                    type="button"
+                    onClick={() => setObjectPage((page) => Math.min(totalPages - 1, page + 1))}
+                    disabled={currentPage >= totalPages - 1}
+                  >
+                    下一页
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="object-grid">
+              {pagedBoxes.map((box, index) => {
+                const displayIndex = index + 1 + currentPage * PAGE_SIZE
+                const displayName = labelDrafts[box.id]?.name || box.label || '未命名'
+                return (
+                  <button
+                    key={box.id}
+                    type="button"
+                    className={`object-slot ${box.id === selectedBoxId ? 'active' : ''}`}
+                    onClick={() => selectBox(box.id)}
+                  >
+                    <div className="slot-label">#{displayIndex} {displayName}</div>
+                    <div className="slot-hint">{box.id === selectedBoxId ? '当前已选中' : '点击切换'}</div>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        </div>
 
         <div className="bottom-actions solo">
           <button
