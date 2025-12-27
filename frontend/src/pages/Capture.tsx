@@ -39,6 +39,121 @@ const descriptionPool = [
 
 const PAGE_SIZE = 20
 
+const categorizeByName = (rawName: string) => {
+  const name = rawName.replace(/\s+/g, '')
+  if (!name) return '杂物'
+
+  const has = (keywords: string[]) => keywords.some((keyword) => name.includes(keyword))
+
+  const furniture = [
+    '椅',
+    '桌',
+    '柜',
+    '床',
+    '灯',
+    '沙发',
+    '书架',
+    '茶几',
+    '镜',
+    '画',
+    '帘',
+    '门',
+    '窗',
+    '箱',
+    '桶',
+    '盆',
+    '架',
+    '凳',
+    '炉',
+    '柜台',
+  ]
+  const artisan = [
+    '果酱',
+    '蜂蜜',
+    '葡萄酒',
+    '酒',
+    '果汁',
+    '奶酪',
+    '油',
+    '布',
+    '线',
+    '绳',
+    '皮革',
+    '陶',
+    '瓷',
+    '玻璃',
+    '罐',
+    '瓶',
+    '饰',
+    '项链',
+    '戒',
+    '吊坠',
+    '手链',
+    '摆件',
+    '雕像',
+    '雕塑',
+    '玩偶',
+  ]
+  const forage = ['野', '蘑菇', '花', '树枝', '树叶', '树皮', '矿', '石', '晶', '贝', '海藻', '菌', '苔']
+  const dishes = [
+    '面',
+    '饭',
+    '粥',
+    '汤',
+    '包',
+    '饼',
+    '糕',
+    '茶',
+    '咖啡',
+    '奶茶',
+    '沙拉',
+    '披萨',
+    '汉堡',
+    '寿司',
+    '烤',
+    '炒',
+    '炖',
+    '煎',
+    '拌',
+    '火锅',
+  ]
+  const foods = [
+    '果',
+    '莓',
+    '苹果',
+    '香蕉',
+    '葡萄',
+    '桃',
+    '梨',
+    '橙',
+    '柠檬',
+    '萝卜',
+    '土豆',
+    '番茄',
+    '玉米',
+    '豆',
+    '米',
+    '麦',
+    '薯',
+    '芋',
+    '菜',
+    '肉',
+    '鱼',
+    '虾',
+    '蛋',
+    '奶',
+    '糖',
+    '盐',
+  ]
+
+  if (has(furniture)) return '家具'
+  if (has(artisan)) return '手工艺品'
+  if (has(forage)) return '采集'
+  if (has(dishes)) return '菜品'
+  if (has(foods)) return '食物'
+  return '杂物'
+}
+
 const fileToDataUrl = (file: Blob) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -64,12 +179,13 @@ const defaultTime = (): LabelDraft['time'] => {
 }
 
 const buildInitialDraft = (box: DetectionBoxInput, index: number): LabelDraft => {
-  const category = categoryOptions[index % categoryOptions.length]
+  const name = box.label || namePool[index % namePool.length]
+  const category = categorizeByName(name)
   const x = clamp(box.bounds.x + box.bounds.width * 0.65, 0.16, 0.84)
   const y = clamp(box.bounds.y + box.bounds.height + 0.12, 0.22, 0.9)
 
   return {
-    name: box.label || namePool[index % namePool.length],
+    name,
     category,
     description: '',
     energy: 60 + Math.floor(Math.random() * 60),
@@ -424,8 +540,9 @@ const CapturePage = () => {
       const result = await generateLabel(previewUrl, selectedBox.bounds, selectedBox.label)
       const nextName = result.label?.trim() || selectedDraft?.name || selectedBox.label || ''
       if (nextName) {
-        updateLabelDraft(selectedBoxId, { name: nextName })
-        await runDescriptionGeneration(nextName, selectedDraft?.category || '杂物', selectedBoxId)
+        const nextCategory = categorizeByName(nextName)
+        updateLabelDraft(selectedBoxId, { name: nextName, category: nextCategory })
+        await runDescriptionGeneration(nextName, nextCategory, selectedBoxId)
       }
     } catch (error) {
       console.error('取名失败，保留原名', error)
@@ -483,15 +600,13 @@ const CapturePage = () => {
     }
   }, [selectedBoxId, selectedDraft, runDescriptionGeneration])
 
-  const handleTagPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!selectedBoxId || !previewRef.current || !tagRef.current || !selectedDraft) return
-    event.preventDefault()
-    const containerRect = previewRef.current.getBoundingClientRect()
-    const tagRect = tagRef.current.getBoundingClientRect()
-    const startX = event.clientX
-    const startY = event.clientY
-    const startPos = selectedDraft.tagPosition
-
+  const startTagDrag = (
+    startX: number,
+    startY: number,
+    containerRect: DOMRect,
+    tagRect: DOMRect,
+    startPos: { xPercent: number; yPercent: number },
+  ) => {
     const halfWidthPercent = (tagRect.width / containerRect.width) / 2
     const halfHeightPercent = (tagRect.height / containerRect.height) / 2
 
@@ -502,7 +617,7 @@ const CapturePage = () => {
       const absoluteY = startPos.yPercent * containerRect.height + deltaY
       const nextXPercent = clamp(absoluteX / containerRect.width, halfWidthPercent, 1 - halfWidthPercent)
       const nextYPercent = clamp(absoluteY / containerRect.height, halfHeightPercent, 1 - halfHeightPercent)
-      updateLabelDraft(selectedBoxId, {
+      updateLabelDraft(selectedBoxId!, {
         tagPosition: { xPercent: nextXPercent, yPercent: nextYPercent },
       })
     }
@@ -518,17 +633,15 @@ const CapturePage = () => {
     window.addEventListener('pointerup', handleUp)
   }
 
-  const handleScaleHandleDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!selectedBoxId || !previewRef.current || !tagRef.current || !selectedDraft) return
-    event.preventDefault()
-    event.stopPropagation()
-    const containerRect = previewRef.current.getBoundingClientRect()
-    const tagRect = tagRef.current.getBoundingClientRect()
-    const baseWidth = tagRect.width / selectedDraft.tagScale
-    const baseHeight = tagRect.height / selectedDraft.tagScale
-    const startScale = selectedDraft.tagScale
-    const startX = event.clientX
-    const startY = event.clientY
+  const startTagScale = (
+    startX: number,
+    startY: number,
+    containerRect: DOMRect,
+    tagRect: DOMRect,
+    startScale: number,
+  ) => {
+    const baseWidth = tagRect.width / startScale
+    const baseHeight = tagRect.height / startScale
 
     const handleMove = (moveEvent: PointerEvent) => {
       const delta = (moveEvent.clientX - startX + (moveEvent.clientY - startY)) / 220
@@ -538,7 +651,7 @@ const CapturePage = () => {
       const halfWidthPercent = scaledWidth / containerRect.width / 2
       const halfHeightPercent = scaledHeight / containerRect.height / 2
 
-      const currentPos = useCaptureStore.getState().labelDrafts[selectedBoxId]?.tagPosition ?? {
+      const currentPos = useCaptureStore.getState().labelDrafts[selectedBoxId!]?.tagPosition ?? {
         xPercent: 0.5,
         yPercent: 0.5,
       }
@@ -546,7 +659,7 @@ const CapturePage = () => {
       const clampedX = clamp(currentPos.xPercent, halfWidthPercent, 1 - halfWidthPercent)
       const clampedY = clamp(currentPos.yPercent, halfHeightPercent, 1 - halfHeightPercent)
 
-      updateLabelDraft(selectedBoxId, {
+      updateLabelDraft(selectedBoxId!, {
         tagScale: nextScale,
         tagPosition: { xPercent: clampedX, yPercent: clampedY },
       })
@@ -555,10 +668,37 @@ const CapturePage = () => {
     const handleUp = () => {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
+      setTagDragging(false)
     }
 
+    setTagDragging(true)
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
+  }
+
+  const handleTagPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!selectedBoxId || !previewRef.current || !tagRef.current || !selectedDraft) return
+    event.preventDefault()
+    const containerRect = previewRef.current.getBoundingClientRect()
+    const tagRect = tagRef.current.getBoundingClientRect()
+    const startX = event.clientX
+    const startY = event.clientY
+    const startPos = selectedDraft.tagPosition
+
+    const localX = startX - tagRect.left
+    const localY = startY - tagRect.top
+    const edgeThreshold = Math.min(22, Math.max(12, Math.min(tagRect.width, tagRect.height) * 0.08))
+    const nearLeft = localX <= edgeThreshold
+    const nearRight = tagRect.width - localX <= edgeThreshold
+    const nearTop = localY <= edgeThreshold
+    const nearBottom = tagRect.height - localY <= edgeThreshold
+
+    if (nearLeft || nearRight || nearTop || nearBottom) {
+      startTagScale(startX, startY, containerRect, tagRect, selectedDraft.tagScale)
+      return
+    }
+
+    startTagDrag(startX, startY, containerRect, tagRect, startPos)
   }
 
   const handleTimePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -789,27 +929,16 @@ const CapturePage = () => {
                         }}
                         onPointerDown={handleTagPointerDown}
                       >
-                        <div className="tag-name-row">{selectedDraft.name || '未命名物品'}</div>
-                        <div className="tag-divider" />
-                        <div className="tag-category-text">{selectedDraft.category || '类别'}</div>
-                        <div className="tag-divider thick" />
-                        <div className="tag-body">
-                          <p>{selectedDraft.description || '在这里写下物品的故事，或点击右侧重生按钮。'}</p>
-                        </div>
-                        {(selectedDraft.category === '菜品' || selectedDraft.category === '食物') && (
-                          <div className="tag-stats">
-                            <div className="tag-stat">
-                              <span className="stat-icon energy" />
-                              <span className="stat-label">+{selectedDraft.energy} 能量</span>
-                            </div>
-                            <div className="tag-stat">
-                              <span className="stat-icon health" />
-                              <span className="stat-label">+{selectedDraft.health} 生命值</span>
-                            </div>
+                        <div className="tag-content">
+                          <div className="tag-title">{selectedDraft.name || '未命名物品'}</div>
+                          <div className="tag-category">{selectedDraft.category || '类别'}</div>
+                          <div className="tag-description">
+                            {selectedDraft.description || '在这里写下物品的故事，或点击右侧重生按钮。'}
                           </div>
-                        )}
-                        <div className="tag-handle" onPointerDown={handleScaleHandleDown}>
-                          ⤢
+                          <div className="tag-stats">
+                            <div className="tag-stat energy">+{selectedDraft.energy} 能量</div>
+                            <div className="tag-stat health">+{selectedDraft.health} 生命值</div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -910,7 +1039,13 @@ const CapturePage = () => {
                           <input
                             className="input-wood"
                             value={selectedDraft.name}
-                            onChange={(event) => updateLabelDraft(selectedBoxId!, { name: event.target.value })}
+                            onChange={(event) => {
+                              const nextName = event.target.value
+                              updateLabelDraft(selectedBoxId!, {
+                                name: nextName,
+                                category: categorizeByName(nextName),
+                              })
+                            }}
                             placeholder="给物品起个星露谷名字"
                           />
                           <button
