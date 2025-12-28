@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+from datetime import date
 from io import BytesIO
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 from ..models.common import LabelPayload, NormalizedBounds, TimePayload
-from .utils import clamp, format_time_label, wrap_text
+from .utils import clamp, wrap_text
 
 
 class ImageService:
-  """Composes the final artwork (tag + time + coin) on top of the pixel image."""
+  """Composes the final artwork (tag + time) on top of the pixel image."""
 
   def __init__(self) -> None:
     self.font = ImageFont.load_default()
+    self._clock_assets = self._load_clock_assets()
 
   def compose(self, base_image_bytes: bytes, label: LabelPayload, box_bounds: NormalizedBounds | None) -> bytes:
     base = Image.open(BytesIO(base_image_bytes)).convert("RGBA")
@@ -23,7 +26,6 @@ class ImageService:
 
     self._draw_tag(canvas, label)
     self._draw_time_chip(canvas, label.time)
-    self._draw_coin(canvas)
 
     output = BytesIO()
     canvas.save(output, format="PNG")
@@ -78,6 +80,11 @@ class ImageService:
       draw.text((text_x + body_width * 0.5, current_y), health_text, fill=(141, 26, 26, 255), font=self.font)
 
   def _draw_time_chip(self, canvas: Image.Image, time: TimePayload) -> None:
+    clock = self._clock_assets.get("day" if 6 <= time.hour < 18 else "night")
+    if clock:
+      self._draw_clock_background(canvas, time, clock)
+      return
+
     draw = ImageDraw.Draw(canvas)
     margin = 12
     box_width = 180
@@ -96,41 +103,54 @@ class ImageService:
     text_x = x0 + 12
     top_y = y0 + 10
     draw.text((text_x, top_y), f"{time.month}月{time.day}日", fill=(64, 38, 12, 255), font=self.font)
-    draw.text((text_x, top_y + 18), format_time_label(time.hour, time.minute), fill=(64, 38, 12, 255), font=self.font)
+    draw.text((text_x, top_y + 18), f"{time.hour:02d}:{time.minute:02d}", fill=(64, 38, 12, 255), font=self.font)
 
-    center_x = x1 - 36
-    center_y = y0 + box_height / 2
-    radius = 24
-    draw.ellipse([center_x - radius, center_y - radius, center_x + radius, center_y + radius], outline=outline, fill=(239, 211, 170, 255), width=2)
+  def _load_clock_assets(self) -> dict[str, Image.Image]:
+    root = Path(__file__).resolve().parents[3]
+    day_path = root / "frontend" / "public" / "白天时钟.png"
+    night_path = root / "frontend" / "public" / "夜晚时钟.png"
+    assets: dict[str, Image.Image] = {}
+    try:
+      assets["day"] = Image.open(day_path).convert("RGBA")
+      assets["night"] = Image.open(night_path).convert("RGBA")
+    except Exception:
+      return {}
+    return assets
 
-    minute_angle = (time.minute / 60) * 360
-    hour_angle = ((time.hour % 12) / 12) * 360 + (time.minute / 60) * 30
-    self._draw_hand(draw, center_x, center_y, radius * 0.9, minute_angle, outline)
-    self._draw_hand(draw, center_x, center_y, radius * 0.65, hour_angle, outline)
-    draw.ellipse([center_x - 2, center_y - 2, center_x + 2, center_y + 2], fill=outline)
-
-  def _draw_hand(self, draw: ImageDraw.ImageDraw, cx: float, cy: float, length: float, angle_deg: float, color: tuple[int, int, int, int]) -> None:
-    import math
-
-    radians = math.radians(angle_deg - 90)  # start from top
-    x = cx + length * math.cos(radians)
-    y = cy + length * math.sin(radians)
-    draw.line([(cx, cy), (x, y)], fill=color, width=2)
-
-  def _draw_coin(self, canvas: Image.Image) -> None:
+  def _draw_clock_background(self, canvas: Image.Image, time: TimePayload, clock: Image.Image) -> None:
     draw = ImageDraw.Draw(canvas)
-    box_width = 140
-    box_height = 32
     margin = 12
-    top_offset = margin + 74 + 10
+    clock_width = 200
+    scale = clock_width / clock.width
+    clock_height = int(clock.height * scale)
 
     x1 = canvas.width - margin
-    x0 = x1 - box_width
-    y0 = top_offset
-    y1 = y0 + box_height
+    x0 = x1 - clock_width
+    y0 = margin
 
-    fill = (234, 188, 76, 240)
-    outline = (162, 108, 28, 255)
+    resized = clock.resize((clock_width, clock_height), resample=Image.NEAREST)
+    canvas.alpha_composite(resized, (int(x0), int(y0)))
 
-    draw.rounded_rectangle([x0, y0, x1, y1], radius=8, fill=fill, outline=outline, width=2)
-    draw.text((x0 + 12, y0 + 8), "88888888", fill=(84, 52, 10, 255), font=self.font)
+    date_label = self._format_date_label(time)
+    time_label = f"{time.hour:02d}:{time.minute:02d}"
+
+    date_left = x0 + clock_width * 0.38
+    date_center_x = date_left + clock_width * 0.54 / 2
+    date_center_y = y0 + clock_height * 0.199
+
+    time_left = x0 + clock_width * 0.38
+    time_center_x = time_left + clock_width * 0.54 / 2
+    time_center_y = y0 + clock_height * 0.535
+
+    text_color = (58, 36, 22, 255)
+    draw.text((date_center_x, date_center_y), date_label, fill=text_color, font=self.font, anchor="mm")
+    draw.text((time_center_x, time_center_y), time_label, fill=text_color, font=self.font, anchor="mm")
+
+  def _format_date_label(self, time: TimePayload) -> str:
+    year = date.today().year
+    try:
+      weekday = date(year, time.month, time.day).weekday()
+    except ValueError:
+      weekday = 0
+    weekdays = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+    return f"{time.day}日 {weekdays[weekday]}"

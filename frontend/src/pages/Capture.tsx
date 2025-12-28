@@ -192,9 +192,9 @@ const buildInitialDraft = (box: DetectionBoxInput, index: number): LabelDraft =>
     health: 40 + Math.floor(Math.random() * 60),
     time: defaultTime(),
     timePosition: { xPercent: 0.83, yPercent: 0.14 },
-    timeScale: 1,
+    timeScale: 0.6,
     tagPosition: { xPercent: x, yPercent: y },
-    tagScale: 1,
+    tagScale: 0.7,
   }
 }
 
@@ -202,6 +202,32 @@ const clampLongEdge = (value: number) => {
   if (value < 720) return 720
   if (value > 1600) return 1600
   return 1280
+}
+
+const getContainedImageBounds = (
+  containerRect: DOMRect,
+  imageEl: HTMLImageElement | null,
+) => {
+  const containerWidth = containerRect.width
+  const containerHeight = containerRect.height
+  if (!imageEl || !imageEl.naturalWidth || !imageEl.naturalHeight || containerWidth <= 0 || containerHeight <= 0) {
+    return { left: 0, top: 0, width: containerWidth, height: containerHeight }
+  }
+
+  const imageRatio = imageEl.naturalWidth / imageEl.naturalHeight
+  const containerRatio = containerWidth / containerHeight
+
+  if (containerRatio > imageRatio) {
+    const height = containerHeight
+    const width = height * imageRatio
+    const left = (containerWidth - width) / 2
+    return { left, top: 0, width, height }
+  }
+
+  const width = containerWidth
+  const height = width / imageRatio
+  const top = (containerHeight - height) / 2
+  return { left: 0, top, width, height }
 }
 
 const loadImageFromUrl = (url: string) =>
@@ -276,16 +302,23 @@ const pixelateFromUrl = async (url: string, blockSize = 10) => {
 }
 
 const formatTime = (hour: number, minute: number) => {
-  const suffix = hour < 12 ? '上午' : '下午'
-  const displayHour = hour % 12 === 0 ? 12 : hour % 12
+  const paddedHour = hour.toString().padStart(2, '0')
   const paddedMinute = minute.toString().padStart(2, '0')
-  return `${suffix} ${displayHour}:${paddedMinute}`
+  return `${paddedHour}:${paddedMinute}`
+}
+
+const formatDateLabel = (month: number, day: number) => {
+  const year = new Date().getFullYear()
+  const weekdayIndex = new Date(year, Math.max(0, month - 1), day).getDay()
+  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+  return `${day}日 ${weekdays[weekdayIndex]}`
 }
 
 const CapturePage = () => {
   const fileInputId = 'capture-upload-input'
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const previewRef = useRef<HTMLDivElement | null>(null)
+  const previewImageRef = useRef<HTMLImageElement | null>(null)
   const tagRef = useRef<HTMLDivElement | null>(null)
   const timeRef = useRef<HTMLDivElement | null>(null)
   const previewUrlRef = useRef<string | null>(null)
@@ -306,6 +339,9 @@ const CapturePage = () => {
   const [objectPage, setObjectPage] = useState(0)
   const [timeDragging, setTimeDragging] = useState(false)
   const describedRef = useRef<Set<string>>(new Set())
+  const tagAlignedRef = useRef<Set<string>>(new Set())
+  const timeAlignedRef = useRef<Set<string>>(new Set())
+  const [previewReadyToken, setPreviewReadyToken] = useState(0)
 
   const uploadFile = useCaptureStore((state) => state.uploadFile)
   const previewUrl = useCaptureStore((state) => state.previewUrl)
@@ -416,6 +452,8 @@ const CapturePage = () => {
       setDetecting(true)
       resetCapture()
       describedRef.current.clear()
+      tagAlignedRef.current.clear()
+      timeAlignedRef.current.clear()
 
       try {
         const resized = await resizeImageToBounds(file)
@@ -600,6 +638,44 @@ const CapturePage = () => {
     }
   }, [selectedBoxId, selectedDraft, runDescriptionGeneration])
 
+  useEffect(() => {
+    if (!selectedBoxId || !selectedDraft || !previewRef.current || !tagRef.current) return
+    if (tagAlignedRef.current.has(selectedBoxId)) return
+    const frame = window.requestAnimationFrame(() => {
+      if (!previewRef.current || !tagRef.current) return
+      const containerRect = previewRef.current.getBoundingClientRect()
+      const tagRect = tagRef.current.getBoundingClientRect()
+      if (containerRect.width <= 0 || containerRect.height <= 0 || tagRect.width <= 0 || tagRect.height <= 0) {
+        return
+      }
+      const imageBounds = getContainedImageBounds(containerRect, previewImageRef.current)
+      const xPercent = (imageBounds.left + tagRect.width / 2) / containerRect.width
+      const yPercent = (imageBounds.top + imageBounds.height - tagRect.height / 2) / containerRect.height
+      updateLabelDraft(selectedBoxId, { tagPosition: { xPercent, yPercent } })
+      tagAlignedRef.current.add(selectedBoxId)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [previewReadyToken, selectedBoxId, selectedDraft, updateLabelDraft])
+
+  useEffect(() => {
+    if (!selectedBoxId || !selectedDraft || !previewRef.current || !timeRef.current) return
+    if (timeAlignedRef.current.has(selectedBoxId)) return
+    const frame = window.requestAnimationFrame(() => {
+      if (!previewRef.current || !timeRef.current) return
+      const containerRect = previewRef.current.getBoundingClientRect()
+      const timeRect = timeRef.current.getBoundingClientRect()
+      if (containerRect.width <= 0 || containerRect.height <= 0 || timeRect.width <= 0 || timeRect.height <= 0) {
+        return
+      }
+      const imageBounds = getContainedImageBounds(containerRect, previewImageRef.current)
+      const xPercent = (imageBounds.left + imageBounds.width - timeRect.width / 2) / containerRect.width
+      const yPercent = (imageBounds.top + timeRect.height / 2) / containerRect.height
+      updateLabelDraft(selectedBoxId, { timePosition: { xPercent, yPercent } })
+      timeAlignedRef.current.add(selectedBoxId)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [previewReadyToken, selectedBoxId, selectedDraft, updateLabelDraft])
+
   const startTagDrag = (
     startX: number,
     startY: number,
@@ -645,7 +721,7 @@ const CapturePage = () => {
 
     const handleMove = (moveEvent: PointerEvent) => {
       const delta = (moveEvent.clientX - startX + (moveEvent.clientY - startY)) / 220
-      const nextScale = clamp(startScale + delta, 0.7, 1.6)
+      const nextScale = clamp(startScale + delta, 0.5, 1.6)
       const scaledWidth = baseWidth * nextScale
       const scaledHeight = baseHeight * nextScale
       const halfWidthPercent = scaledWidth / containerRect.width / 2
@@ -750,7 +826,7 @@ const CapturePage = () => {
 
     const handleMove = (moveEvent: PointerEvent) => {
       const delta = (moveEvent.clientX - startX + (moveEvent.clientY - startY)) / 220
-      const nextScale = clamp(startScale + delta, 0.7, 1.6)
+      const nextScale = clamp(startScale + delta, 0.5, 1.6)
       const scaledWidth = baseWidth * nextScale
       const scaledHeight = baseHeight * nextScale
       const halfWidthPercent = scaledWidth / containerRect.width / 2
@@ -839,8 +915,9 @@ const CapturePage = () => {
   const timeState = selectedDraft?.time ?? defaultTime()
   const timePosition = selectedDraft?.timePosition ?? { xPercent: 0.83, yPercent: 0.14 }
   const timeScale = selectedDraft?.timeScale ?? 1
-  const hourAngle = ((timeState.hour % 12) + timeState.minute / 60) * 30
-  const minuteAngle = timeState.minute * 6
+  const isDaytime = timeState.hour >= 6 && timeState.hour < 18
+  const clockBackground = isDaytime ? '/白天时钟.png' : '/夜晚时钟.png'
+  const dateLabel = formatDateLabel(timeState.month ?? 1, timeState.day ?? 1)
 
   return (
     <div className="page capture-page">
@@ -891,7 +968,13 @@ const CapturePage = () => {
                   )}
 
                   {displayedPreview && (
-                    <img alt="上传预览" className="preview-image" src={displayedPreview} />
+                    <img
+                      ref={previewImageRef}
+                      alt="上传预览"
+                      className="preview-image"
+                      src={displayedPreview}
+                      onLoad={() => setPreviewReadyToken((token) => token + 1)}
+                    />
                   )}
 
                   <div className="box-layer">
@@ -955,20 +1038,10 @@ const CapturePage = () => {
                       }}
                       onPointerDown={handleTimePointerDown}
                     >
-                      <div className="time-widget">
-                        <div className="time-meta">
-                          <span className="time-day">
-                            {timeState.month ?? 1}月{timeState.day ?? 1}日
-                          </span>
-                          <span className="time-text">{formatTime(timeState.hour, timeState.minute)}</span>
-                        </div>
-                        <div className="clock-face">
-                          <div className="clock-hand hour" style={{ transform: `rotate(${hourAngle}deg)` }} />
-                          <div className="clock-hand minute" style={{ transform: `rotate(${minuteAngle}deg)` }} />
-                          <div className="clock-center" />
-                        </div>
+                      <div className="time-widget" style={{ backgroundImage: `url(${clockBackground})` }}>
+                        <span className="time-date">{dateLabel}</span>
+                        <span className="time-time">{formatTime(timeState.hour, timeState.minute)}</span>
                       </div>
-                      <div className="coin-chip">88888888</div>
                       <div className="time-handle" onPointerDown={handleTimeScaleHandleDown}>
                         ⤢
                       </div>
@@ -1091,64 +1164,62 @@ const CapturePage = () => {
                           </button>
                         </div>
                       </div>
-                      {(selectedDraft.category === '菜品' || selectedDraft.category === '食物') && (
-                        <div className="form-row split paper-field">
-                          <div className="stat-ghost">
-                            <span>能量</span>
-                            <div className="stat-field">
-                              <button
-                                className="mini-chip ghost"
-                                type="button"
-                                onClick={() => adjustStat('energy', -5)}
-                              >
-                                -
-                              </button>
-                              <input
-                                className="input-wood"
-                                type="number"
-                                value={selectedDraft.energy}
-                                min={0}
-                                max={200}
-                                onChange={(event) => handleStatChange('energy', Number(event.target.value))}
-                              />
-                              <button
-                                className="mini-chip ghost"
-                                type="button"
-                                onClick={() => adjustStat('energy', 5)}
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-                          <div className="stat-ghost">
-                            <span>生命值</span>
-                            <div className="stat-field">
-                              <button
-                                className="mini-chip ghost"
-                                type="button"
-                                onClick={() => adjustStat('health', -5)}
-                              >
-                                -
-                              </button>
-                              <input
-                                className="input-wood"
-                                type="number"
-                                value={selectedDraft.health}
-                                min={0}
-                                max={200}
-                                onChange={(event) => handleStatChange('health', Number(event.target.value))}
-                              />
-                              <button
-                                className="mini-chip ghost"
-                                type="button"
-                                onClick={() => adjustStat('health', 5)}
-                              >
-                                +
-                              </button>
-                            </div>
+                      <div className="form-row split paper-field">
+                        <div className="stat-ghost">
+                          <span>能量</span>
+                          <div className="stat-field">
+                            <button
+                              className="mini-chip ghost"
+                              type="button"
+                              onClick={() => adjustStat('energy', -5)}
+                            >
+                              -
+                            </button>
+                            <input
+                              className="input-wood"
+                              type="number"
+                              value={selectedDraft.energy}
+                              min={0}
+                              max={200}
+                              onChange={(event) => handleStatChange('energy', Number(event.target.value))}
+                            />
+                            <button
+                              className="mini-chip ghost"
+                              type="button"
+                              onClick={() => adjustStat('energy', 5)}
+                            >
+                              +
+                            </button>
                           </div>
                         </div>
-                      )}
+                        <div className="stat-ghost">
+                          <span>生命值</span>
+                          <div className="stat-field">
+                            <button
+                              className="mini-chip ghost"
+                              type="button"
+                              onClick={() => adjustStat('health', -5)}
+                            >
+                              -
+                            </button>
+                            <input
+                              className="input-wood"
+                              type="number"
+                              value={selectedDraft.health}
+                              min={0}
+                              max={200}
+                              onChange={(event) => handleStatChange('health', Number(event.target.value))}
+                            />
+                            <button
+                              className="mini-chip ghost"
+                              type="button"
+                              onClick={() => adjustStat('health', 5)}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                       <div className="form-row paper-field">
                         <span>时间</span>
                         <div className="field-with-action">

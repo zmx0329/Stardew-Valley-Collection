@@ -80,12 +80,12 @@ const createEmptyLabelDraft = (): LabelDraft => ({
     xPercent: 0.83,
     yPercent: 0.14,
   },
-  timeScale: 1,
+  timeScale: 0.6,
   tagPosition: {
     xPercent: 0.5,
     yPercent: 0.5,
   },
-  tagScale: 1,
+  tagScale: 0.7,
 })
 
 const computeArea = (bounds: NormalizedBounds) =>

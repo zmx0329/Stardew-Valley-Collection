@@ -23,7 +23,7 @@
 - `backend/app/config.py`：环境变量配置加载，判定是否走本地存储。
 - `backend/app/dependencies.py`：注入 Settings、Detection/Text/ImageGen/Artwork 服务的单例。
 - `backend/app/routers/health.py` / `detect.py` / `text_gen.py` / `image_gen.py` / `label.py` / `artworks.py`：路由定义，负责请求/错误映射。
-- `backend/app/services/detection_service.py` / `text_service.py` / `image_gen_service.py` / `label_service.py` / `image_service.py` / `artwork_service.py`：检测（阿里云 ObjectDet 优先，需 OSS 公网 URL；其次 Azure，缺省稳定兜底）、文案生成（LLM 失败用模板）、生图（支持豆包 Seedream/Qwen/Gemini 远程生成，失败时本地像素化）、命名（多模态中文物品名）、Pillow 标签+时间+金币合成、作品保存/列表。
+- `backend/app/services/detection_service.py` / `text_service.py` / `image_gen_service.py` / `label_service.py` / `image_service.py` / `artwork_service.py`：检测（阿里云 ObjectDet 优先，需 OSS 公网 URL；其次 Azure，缺省稳定兜底）、文案生成（LLM 失败用模板）、生图（支持豆包 Seedream/Qwen/Gemini 远程生成，失败时本地像素化）、命名（多模态中文物品名）、Pillow 标签+时间合成、作品保存/列表。
 - `backend/app/clients/detection_client.py` / `text_client.py` / `label_client.py` / `storage_client.py` / `oss_client.py`：对阿里云/ Azure CV、文案/命名模型、Supabase/本地文件存储与 OSS 上传的调用封装。
 - `backend/app/models/*.py`：Pydantic 契约（检测、文案、生图、作品保存/列表、公用数据结构）。
 - `backend/app/tests/test_api.py`：Pytest 契约测试，覆盖健康检查、检测错误映射、文案兜底、生图兜底、合成哈希一致性与列表返回。
