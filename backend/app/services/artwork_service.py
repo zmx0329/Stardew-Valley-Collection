@@ -35,10 +35,22 @@ class ArtworkService:
     url = await self.storage_client.upload_image(filename, composed)
 
     record_id = checksum[:16]
-    record = ArtworkRecord(id=record_id, user_id=payload.user_id, url=url, created_at=datetime.now(timezone.utc))
+    record = ArtworkRecord(
+      id=record_id,
+      user_id=payload.user_id,
+      name=payload.label.name or "未命名物品",
+      url=url,
+      created_at=datetime.now(timezone.utc),
+    )
     await self.storage_client.save_record(record)
 
-    return SaveArtworkResponse(id=record_id, url=url, created_at=record.created_at, checksum=checksum)
+    return SaveArtworkResponse(
+      id=record_id,
+      name=record.name or "未命名物品",
+      url=url,
+      created_at=record.created_at,
+      checksum=checksum,
+    )
 
   async def list_artworks(self, limit: int = 20, offset: int = 0) -> ArtworksResponse:
     items = await self.storage_client.list_records(limit, offset)

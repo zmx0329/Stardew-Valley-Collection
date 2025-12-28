@@ -23,6 +23,7 @@ class SaveArtworkResponse(BaseModel):
   model_config = ConfigDict(extra="forbid")
 
   id: str
+  name: str
   url: str
   created_at: datetime
   checksum: str

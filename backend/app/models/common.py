@@ -63,5 +63,6 @@ class ArtworkRecord(BaseModel):
 
   id: str
   user_id: str
+  name: str | None = None
   url: str
   created_at: datetime

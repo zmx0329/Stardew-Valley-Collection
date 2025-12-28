@@ -55,6 +55,7 @@ class LocalStorageClient:
           ArtworkRecord(
             id=item["id"],
             user_id=item["user_id"],
+            name=item.get("name"),
             url=item["url"],
             created_at=datetime.fromisoformat(item["created_at"]),
           )
@@ -112,6 +113,7 @@ class SupabaseStorageClient:
         ArtworkRecord(
           id=item["id"],
           user_id=item["user_id"],
+          name=item.get("name"),
           url=item["url"],
           created_at=datetime.fromisoformat(item["created_at"]),
         )

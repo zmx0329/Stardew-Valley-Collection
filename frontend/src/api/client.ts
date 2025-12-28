@@ -33,6 +33,7 @@ export type SaveArtworkPayload = {
 
 export type SaveArtworkResponse = {
   id: string
+  name: string
   url: string
   created_at: string
   checksum: string
@@ -41,6 +42,7 @@ export type SaveArtworkResponse = {
 export type ArtworkRecord = {
   id: string
   user_id: string
+  name?: string
   url: string
   created_at: string
 }

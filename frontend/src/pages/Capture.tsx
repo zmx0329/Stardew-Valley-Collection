@@ -1,3 +1,4 @@
+import html2canvas from 'html2canvas'
 import {
   useCallback,
   useEffect,
@@ -10,7 +11,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { Link } from 'react-router-dom'
-import html2canvas from 'html2canvas'
 import {
   useCaptureStore,
   type DetectionBoxInput,
@@ -216,7 +216,7 @@ const clampLongEdge = (value: number) => {
 }
 
 const getContainedImageBounds = (
-  containerRect: DOMRect,
+  containerRect: Pick<DOMRect, 'width' | 'height'>,
   imageEl: HTMLImageElement | null,
 ) => {
   const containerWidth = containerRect.width
@@ -913,16 +913,56 @@ const CapturePage = () => {
   }
 
   const capturePreview = useCallback(async () => {
-    if (!previewRef.current) return null
-    const canvas = await html2canvas(previewRef.current, {
-      backgroundColor: null,
-      scale: 1,
-      useCORS: true,
-      allowTaint: true,
-      ignoreElements: (element) =>
-        element instanceof HTMLElement && element.dataset.captureIgnore === 'true',
-    })
-    return canvas.toDataURL('image/png')
+    if (!previewRef.current || !previewImageRef.current) return null
+    const container = previewRef.current
+    const imageEl = previewImageRef.current
+    if (!imageEl.naturalWidth || !imageEl.naturalHeight) return null
+
+    const containerRect = container.getBoundingClientRect()
+    const imageBounds = getContainedImageBounds(containerRect, imageEl)
+    if (imageBounds.width <= 0 || imageBounds.height <= 0) return null
+
+    const outputCanvas = document.createElement('canvas')
+    outputCanvas.width = imageEl.naturalWidth
+    outputCanvas.height = imageEl.naturalHeight
+    const ctx = outputCanvas.getContext('2d')
+    if (!ctx) return null
+
+    ctx.drawImage(imageEl, 0, 0, outputCanvas.width, outputCanvas.height)
+
+    const imageScale = outputCanvas.width / imageBounds.width
+    if (!Number.isFinite(imageScale) || imageScale <= 0) return outputCanvas.toDataURL('image/png')
+
+    const drawOverlay = async (element: HTMLDivElement | null) => {
+      if (!element) return
+      const rect = element.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return
+
+      const centerX = rect.left + rect.width / 2 - containerRect.left
+      const centerY = rect.top + rect.height / 2 - containerRect.top
+      const relativeX = (centerX - imageBounds.left) / imageBounds.width
+      const relativeY = (centerY - imageBounds.top) / imageBounds.height
+      const imageX = relativeX * outputCanvas.width
+      const imageY = relativeY * outputCanvas.height
+
+      const overlayCanvas = await html2canvas(element, {
+        backgroundColor: null,
+        scale: imageScale,
+        useCORS: true,
+        allowTaint: true,
+      })
+
+      ctx.drawImage(
+        overlayCanvas,
+        imageX - overlayCanvas.width / 2,
+        imageY - overlayCanvas.height / 2,
+      )
+    }
+
+    await drawOverlay(tagRef.current)
+    await drawOverlay(timeRef.current)
+
+    return outputCanvas.toDataURL('image/png')
   }, [])
 
   const handleSave = async () => {
@@ -1034,7 +1074,7 @@ const CapturePage = () => {
                     />
                   )}
 
-                  <div className="box-layer">
+                  <div className="box-layer" data-capture-ignore="true">
                     {displayedBoxes.map((box) => {
                       const draftName = labelDrafts[box.id]?.name?.trim()
                       const displayName = draftName || box.label || '物体'

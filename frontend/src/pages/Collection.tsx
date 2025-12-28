@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { listArtworks, type ArtworkRecord } from '../api/client'
 
 const PAGE_SIZE = 12
-
 const formatTime = (value: string) => {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -97,44 +96,58 @@ const CollectionPage = () => {
           {artworks.length === 0 && !loading ? (
             <div className="helper-text subtle">还没有作品，去捕物页试试吧。</div>
           ) : (
-            artworks.map((artwork, index) => (
-              <button key={artwork.id} className="collection-card" tabIndex={0} onClick={() => setActiveArtwork(artwork)}>
+            artworks.map((artwork, index) => {
+              const displayName = artwork.name || '未命名物品'
+              const displayDate = artwork.created_at
+              return (
+                <button
+                  key={artwork.id}
+                  className="collection-card"
+                  tabIndex={0}
+                  onClick={() => setActiveArtwork(artwork)}
+                >
                 <div className="card-number">{index + 1 + page * PAGE_SIZE}</div>
                 <div className="card-frame">
                   <div className="card-paper">
-                    <div
-                      className="card-thumb"
-                      style={{ backgroundImage: `url(${artwork.url})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-                    >
-                      {!artwork.url && `作品 ${artwork.id}`}
+                    <div className="card-thumb">
+                      {artwork.url ? (
+                        <img src={artwork.url} alt={displayName} className="card-thumb-image" />
+                      ) : (
+                        `作品 ${artwork.id}`
+                      )}
                     </div>
                     <div className="card-meta">
-                      <span className="card-title">作品 {artwork.id.slice(0, 6)}</span>
-                      <span className="card-info">保存时间：{formatTime(artwork.created_at)}</span>
+                      <span className="card-title">{displayName}</span>
+                      <span className="card-info">保存时间：{formatTime(displayDate)}</span>
                     </div>
                   </div>
                 </div>
-              </button>
-            ))
+                </button>
+              )
+            })
           )}
         </section>
 
-        {activeArtwork && (
-          <div className="modal-overlay" role="dialog" aria-label="查看作品">
-            <div className="modal-card">
-              <div className="modal-header">
-                <span>作品 {activeArtwork.id}</span>
-                <button className="ghost-button" type="button" onClick={() => setActiveArtwork(null)}>
-                  关闭
-                </button>
-              </div>
-              <div className="modal-body">
-                <img src={activeArtwork.url} alt={`作品 ${activeArtwork.id}`} className="modal-image" />
-                <div className="modal-meta">保存时间：{formatTime(activeArtwork.created_at)}</div>
+        {activeArtwork && (() => {
+          const displayName = activeArtwork.name || '未命名物品'
+          const displayDate = activeArtwork.created_at
+          return (
+            <div className="modal-overlay" role="dialog" aria-label="查看作品">
+              <div className="modal-card">
+                <div className="modal-header">
+                  <span>{displayName}</span>
+                  <button className="ghost-button" type="button" onClick={() => setActiveArtwork(null)}>
+                    关闭
+                  </button>
+                </div>
+                <div className="modal-body">
+                  <img src={activeArtwork.url} alt={displayName} className="modal-image" />
+                  <div className="modal-meta">保存时间：{formatTime(displayDate)}</div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </div>
     </div>
   )
