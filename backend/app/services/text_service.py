@@ -41,13 +41,13 @@ class TextService:
       try:
         text = await self.client.generate_description(object_name, category, context)
         trimmed = self._trim_to_two_sentences(text)
-        return TextResponse(description=self._limit_length(trimmed, 50))
+        return TextResponse(description=self._limit_length(trimmed, 30))
       except (TextGenerationError, Exception):
         # Fallback to template on any upstream failure (429/timeout/invalid response/网络不可达)
         pass
 
     fallback = self._template_description(object_name, category, context)
-    return TextResponse(description=self._limit_length(fallback, 50))
+    return TextResponse(description=self._limit_length(fallback, 30))
 
   def _template_description(self, object_name: str, category: str, context: str | None) -> str:
     hint = "像是从谷仓里翻出的旧物" if category in ("杂物", "家具") else "带着刚晒过的暖意"

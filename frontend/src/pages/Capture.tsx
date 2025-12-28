@@ -39,6 +39,17 @@ const descriptionPool = [
 
 const PAGE_SIZE = 20
 
+const limitDescription = (text: string, maxChars = 30) => {
+  if (text.length <= maxChars) return text
+  const shortened = text.slice(0, maxChars).trim()
+  if (!shortened) return text.slice(0, maxChars)
+  const last = shortened[shortened.length - 1]
+  if (!'。！？.!?'.includes(last)) {
+    return `${shortened.slice(0, Math.max(0, maxChars - 1)).trim()}。`
+  }
+  return shortened
+}
+
 const categorizeByName = (rawName: string) => {
   const name = rawName.replace(/\s+/g, '')
   if (!name) return '杂物'
@@ -338,6 +349,8 @@ const CapturePage = () => {
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [objectPage, setObjectPage] = useState(0)
   const [timeDragging, setTimeDragging] = useState(false)
+  const [timeScaling, setTimeScaling] = useState(false)
+  const [timeEdgeHover, setTimeEdgeHover] = useState(false)
   const describedRef = useRef<Set<string>>(new Set())
   const tagAlignedRef = useRef<Set<string>>(new Set())
   const timeAlignedRef = useRef<Set<string>>(new Set())
@@ -556,13 +569,13 @@ const CapturePage = () => {
     try {
       const descriptor = await generateDescription(name || '这件物品', category || '杂物')
       if (boxId) {
-        updateLabelDraft(boxId, { description: descriptor.description })
+        updateLabelDraft(boxId, { description: limitDescription(descriptor.description) })
         describedRef.current.add(boxId)
       }
     } catch (error) {
       const fallback = descriptionPool[Math.floor(Math.random() * descriptionPool.length)]
       if (boxId) {
-        updateLabelDraft(boxId, { description: fallback })
+        updateLabelDraft(boxId, { description: limitDescription(fallback) })
         describedRef.current.add(boxId)
       }
       console.error('文案生成失败，使用模板兜底', error)
@@ -642,7 +655,8 @@ const CapturePage = () => {
     if (!selectedBoxId || !selectedDraft || !previewRef.current || !tagRef.current) return
     if (tagAlignedRef.current.has(selectedBoxId)) return
     const frame = window.requestAnimationFrame(() => {
-      if (!previewRef.current || !tagRef.current) return
+      if (!previewRef.current || !tagRef.current || !previewImageRef.current) return
+      if (!previewImageRef.current.naturalWidth || !previewImageRef.current.naturalHeight) return
       const containerRect = previewRef.current.getBoundingClientRect()
       const tagRect = tagRef.current.getBoundingClientRect()
       if (containerRect.width <= 0 || containerRect.height <= 0 || tagRect.width <= 0 || tagRect.height <= 0) {
@@ -661,7 +675,8 @@ const CapturePage = () => {
     if (!selectedBoxId || !selectedDraft || !previewRef.current || !timeRef.current) return
     if (timeAlignedRef.current.has(selectedBoxId)) return
     const frame = window.requestAnimationFrame(() => {
-      if (!previewRef.current || !timeRef.current) return
+      if (!previewRef.current || !timeRef.current || !previewImageRef.current) return
+      if (!previewImageRef.current.naturalWidth || !previewImageRef.current.naturalHeight) return
       const containerRect = previewRef.current.getBoundingClientRect()
       const timeRect = timeRef.current.getBoundingClientRect()
       if (containerRect.width <= 0 || containerRect.height <= 0 || timeRect.width <= 0 || timeRect.height <= 0) {
@@ -777,15 +792,13 @@ const CapturePage = () => {
     startTagDrag(startX, startY, containerRect, tagRect, startPos)
   }
 
-  const handleTimePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!selectedBoxId || !previewRef.current || !timeRef.current || !selectedDraft) return
-    event.preventDefault()
-    const containerRect = previewRef.current.getBoundingClientRect()
-    const timeRect = timeRef.current.getBoundingClientRect()
-    const startX = event.clientX
-    const startY = event.clientY
-    const startPos = selectedDraft.timePosition ?? { xPercent: 0.83, yPercent: 0.14 }
-
+  const startTimeDrag = (
+    startX: number,
+    startY: number,
+    containerRect: DOMRect,
+    timeRect: DOMRect,
+    startPos: { xPercent: number; yPercent: number },
+  ) => {
     const halfWidthPercent = (timeRect.width / containerRect.width) / 2
     const halfHeightPercent = (timeRect.height / containerRect.height) / 2
 
@@ -796,7 +809,7 @@ const CapturePage = () => {
       const absoluteY = startPos.yPercent * containerRect.height + deltaY
       const nextXPercent = clamp(absoluteX / containerRect.width, halfWidthPercent, 1 - halfWidthPercent)
       const nextYPercent = clamp(absoluteY / containerRect.height, halfHeightPercent, 1 - halfHeightPercent)
-      updateLabelDraft(selectedBoxId, {
+      updateLabelDraft(selectedBoxId!, {
         timePosition: { xPercent: nextXPercent, yPercent: nextYPercent },
       })
     }
@@ -812,17 +825,15 @@ const CapturePage = () => {
     window.addEventListener('pointerup', handleUp)
   }
 
-  const handleTimeScaleHandleDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!selectedBoxId || !previewRef.current || !timeRef.current || !selectedDraft) return
-    event.preventDefault()
-    event.stopPropagation()
-    const containerRect = previewRef.current.getBoundingClientRect()
-    const timeRect = timeRef.current.getBoundingClientRect()
-    const startScale = selectedDraft.timeScale ?? 1
+  const startTimeScale = (
+    startX: number,
+    startY: number,
+    containerRect: DOMRect,
+    timeRect: DOMRect,
+    startScale: number,
+  ) => {
     const baseWidth = timeRect.width / startScale
     const baseHeight = timeRect.height / startScale
-    const startX = event.clientX
-    const startY = event.clientY
 
     const handleMove = (moveEvent: PointerEvent) => {
       const delta = (moveEvent.clientX - startX + (moveEvent.clientY - startY)) / 220
@@ -832,7 +843,7 @@ const CapturePage = () => {
       const halfWidthPercent = scaledWidth / containerRect.width / 2
       const halfHeightPercent = scaledHeight / containerRect.height / 2
 
-      const currentPos = useCaptureStore.getState().labelDrafts[selectedBoxId]?.timePosition ?? {
+      const currentPos = useCaptureStore.getState().labelDrafts[selectedBoxId!]?.timePosition ?? {
         xPercent: 0.83,
         yPercent: 0.14,
       }
@@ -840,7 +851,7 @@ const CapturePage = () => {
       const clampedX = clamp(currentPos.xPercent, halfWidthPercent, 1 - halfWidthPercent)
       const clampedY = clamp(currentPos.yPercent, halfHeightPercent, 1 - halfHeightPercent)
 
-      updateLabelDraft(selectedBoxId, {
+      updateLabelDraft(selectedBoxId!, {
         timeScale: nextScale,
         timePosition: { xPercent: clampedX, yPercent: clampedY },
       })
@@ -849,10 +860,56 @@ const CapturePage = () => {
     const handleUp = () => {
       window.removeEventListener('pointermove', handleMove)
       window.removeEventListener('pointerup', handleUp)
+      setTimeScaling(false)
     }
 
+    setTimeScaling(true)
     window.addEventListener('pointermove', handleMove)
     window.addEventListener('pointerup', handleUp)
+  }
+
+  const handleTimePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!selectedBoxId || !previewRef.current || !timeRef.current || !selectedDraft) return
+    event.preventDefault()
+    const containerRect = previewRef.current.getBoundingClientRect()
+    const timeRect = timeRef.current.getBoundingClientRect()
+    const startX = event.clientX
+    const startY = event.clientY
+    const startPos = selectedDraft.timePosition ?? { xPercent: 0.83, yPercent: 0.14 }
+
+    const localX = startX - timeRect.left
+    const localY = startY - timeRect.top
+    const edgeThreshold = Math.min(22, Math.max(12, Math.min(timeRect.width, timeRect.height) * 0.08))
+    const nearLeft = localX <= edgeThreshold
+    const nearRight = timeRect.width - localX <= edgeThreshold
+    const nearTop = localY <= edgeThreshold
+    const nearBottom = timeRect.height - localY <= edgeThreshold
+
+    if (nearLeft || nearRight || nearTop || nearBottom) {
+      startTimeScale(startX, startY, containerRect, timeRect, selectedDraft.timeScale ?? 1)
+      return
+    }
+
+    startTimeDrag(startX, startY, containerRect, timeRect, startPos)
+  }
+
+  const handleTimePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!timeRef.current || timeDragging || timeScaling) return
+    const timeRect = timeRef.current.getBoundingClientRect()
+    const localX = event.clientX - timeRect.left
+    const localY = event.clientY - timeRect.top
+    const edgeThreshold = Math.min(22, Math.max(12, Math.min(timeRect.width, timeRect.height) * 0.08))
+    const nearLeft = localX <= edgeThreshold
+    const nearRight = timeRect.width - localX <= edgeThreshold
+    const nearTop = localY <= edgeThreshold
+    const nearBottom = timeRect.height - localY <= edgeThreshold
+    setTimeEdgeHover(nearLeft || nearRight || nearTop || nearBottom)
+  }
+
+  const handleTimePointerLeave = () => {
+    if (!timeDragging && !timeScaling) {
+      setTimeEdgeHover(false)
+    }
   }
 
   const capturePreview = useCallback(async () => {
@@ -1030,20 +1087,23 @@ const CapturePage = () => {
                   {displayedPreview && (
                     <div
                       ref={timeRef}
-                      className={`time-coin-placeholder ${timeDragging ? 'dragging' : ''}`}
+                      className={`time-coin-placeholder ${timeDragging ? 'dragging' : ''} ${
+                        timeScaling ? 'scaling' : timeEdgeHover ? 'resize-ready' : ''
+                      }`}
                       style={{
                         left: `${timePosition.xPercent * 100}%`,
                         top: `${timePosition.yPercent * 100}%`,
                         transform: `translate(-50%, -50%) scale(${timeScale})`,
+                        visibility:
+                          selectedBoxId && timeAlignedRef.current.has(selectedBoxId) ? 'visible' : 'hidden',
                       }}
                       onPointerDown={handleTimePointerDown}
+                      onPointerMove={handleTimePointerMove}
+                      onPointerLeave={handleTimePointerLeave}
                     >
                       <div className="time-widget" style={{ backgroundImage: `url(${clockBackground})` }}>
                         <span className="time-date">{dateLabel}</span>
                         <span className="time-time">{formatTime(timeState.hour, timeState.minute)}</span>
-                      </div>
-                      <div className="time-handle" onPointerDown={handleTimeScaleHandleDown}>
-                        ⤢
                       </div>
                     </div>
                   )}
