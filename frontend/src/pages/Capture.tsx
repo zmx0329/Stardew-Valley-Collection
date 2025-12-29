@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   useCaptureStore,
   type DetectionBoxInput,
@@ -23,9 +23,39 @@ import {
   generatePixelImage,
   saveArtwork,
   type SaveArtworkPayload,
+  type SaveArtworkResponse,
 } from '../api/client'
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+const sanitizeFilename = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '').trim()
+
+const downloadFromUrl = async (url: string, filename: string) => {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('下载失败')
+    }
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(objectUrl)
+  } catch {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.target = '_blank'
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  }
+}
 
 const categoryOptions = ['菜品', '食物', '采集', '家具', '手工艺品', '杂物']
 const namePool = ['暖黄色吊灯', '旧木箱', '陶罐', '青草茶', '野莓', '木椅', '罐装果酱']
@@ -326,6 +356,7 @@ const formatDateLabel = (month: number, day: number) => {
 }
 
 const CapturePage = () => {
+  const navigate = useNavigate()
   const fileInputId = 'capture-upload-input'
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const previewRef = useRef<HTMLDivElement | null>(null)
@@ -347,6 +378,7 @@ const CapturePage = () => {
   const [tagDragging, setTagDragging] = useState(false)
   const [detecting, setDetecting] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [savedArtwork, setSavedArtwork] = useState<SaveArtworkResponse | null>(null)
   const [objectPage, setObjectPage] = useState(0)
   const [timeDragging, setTimeDragging] = useState(false)
   const [timeScaling, setTimeScaling] = useState(false)
@@ -421,7 +453,7 @@ const CapturePage = () => {
   const runPixelPreview = useCallback(
     async (imageBase64: string, taskId: number) => {
       setIsGeneratingPixel(true)
-      setGenerationNote('正在生成像素风...')
+      setGenerationNote('图像正在悄然变化，请耐心等待....')
       try {
         const result = await generatePixelImage(imageBase64)
         if (taskRef.current !== taskId) return
@@ -457,11 +489,12 @@ const CapturePage = () => {
 
       const newTaskId = taskRef.current + 1
       taskRef.current = newTaskId
-      setGenerationNote('正在压缩尺寸并召唤像素风...')
+      setGenerationNote('图像正在悄然变化，请耐心等待....')
       setUploadError(null)
       setPixelPreviewUrl(null)
       setResizeInfo(null)
       setSaveMessage(null)
+      setSavedArtwork(null)
       setDetecting(true)
       resetCapture()
       describedRef.current.clear()
@@ -596,7 +629,7 @@ const CapturePage = () => {
         await runDescriptionGeneration(nextName, nextCategory, selectedBoxId)
       }
     } catch (error) {
-      console.error('取名失败，保留原名', error)
+      console.error('重写失败，保留原名', error)
     } finally {
       setNameLoading(false)
     }
@@ -970,6 +1003,7 @@ const CapturePage = () => {
     const selectedBox = detectionBoxes.find((box) => box.id === selectedBoxId)
     setSaveStatus('saving')
     setSaveMessage(null)
+    setSavedArtwork(null)
     let composedImage: string | null = null
     try {
       composedImage = await capturePreview()
@@ -997,15 +1031,24 @@ const CapturePage = () => {
     }
 
     try {
-      await saveArtwork(payload)
+      const saved = await saveArtwork(payload)
       setSaveStatus('success')
-      setSaveMessage('已放入珍藏！')
+      setSaveMessage(null)
+      setSavedArtwork(saved)
     } catch (error) {
       setSaveStatus('error')
       setSaveMessage('没能放进珍藏…再试一次？')
       console.error('保存失败', error)
     }
   }
+
+  const handleDownload = useCallback(async () => {
+    if (!savedArtwork?.url) {
+      return
+    }
+    const fileName = sanitizeFilename(savedArtwork.name || selectedDraft?.name || 'artwork') || 'artwork'
+    await downloadFromUrl(savedArtwork.url, `${fileName}.png`)
+  }, [savedArtwork, selectedDraft?.name])
 
   const canSave = detectionBoxes.length > 0 && !!pixelPreviewUrl && !isGeneratingPixel && !detecting
 
@@ -1020,13 +1063,9 @@ const CapturePage = () => {
     <div className="page capture-page">
       <header className="page-header capture-header">
         <div>
-          <p className="eyebrow">捕物界面</p>
-          <h1>像素预览与三联动</h1>
-          <p className="lede">
-            上传后自动压缩到 720–1600px，后端生图 + 阿里云识别默认选中最大物体，物品栏/框/表单实时联动，便签可拖拽缩放且不越界。
-          </p>
+          <h1>工作台</h1>
         </div>
-        <Link className="ghost-button return-button" to="/">
+        <Link className="ghost-button return-button" to="/home">
           返回主页
         </Link>
       </header>
@@ -1035,7 +1074,6 @@ const CapturePage = () => {
         <div className="workspace">
           <section className="pane preview-pane">
             <div className="pane-top">
-              <div className="pane-title">左侧预览区</div>
               <span className="helper-text subtle">
                 {uploadFile ? `已压缩：${uploadFile.name}` : '状态：未上传'}
               </span>
@@ -1113,7 +1151,7 @@ const CapturePage = () => {
                           <div className="tag-title">{selectedDraft.name || '未命名物品'}</div>
                           <div className="tag-category">{selectedDraft.category || '类别'}</div>
                           <div className="tag-description">
-                            {selectedDraft.description || '在这里写下物品的故事，或点击右侧重生按钮。'}
+                            {selectedDraft.description || '在这里写下物品的故事，或点击右侧重写按钮。'}
                           </div>
                           <div className="tag-stats">
                             <div className="tag-stat energy">+{selectedDraft.energy} 能量</div>
@@ -1145,13 +1183,6 @@ const CapturePage = () => {
                         <span className="time-date">{dateLabel}</span>
                         <span className="time-time">{formatTime(timeState.hour, timeState.minute)}</span>
                       </div>
-                    </div>
-                  )}
-
-                  {isGeneratingPixel && (
-                    <div className="preview-status floating" data-capture-ignore="true">
-                      <span className="status-dot" />
-                      正在生成像素预览...
                     </div>
                   )}
 
@@ -1196,10 +1227,7 @@ const CapturePage = () => {
 
           <section className="pane editor-pane">
             <div className="pane-top">
-              <div className="pane-title">右侧编辑面板</div>
-              <span className="helper-text subtle">
-                {selectedDraft ? '改动后左侧立即同步' : '选中一个识别框后开始编辑'}
-              </span>
+              <div className="pane-title">编辑面板</div>
             </div>
             <div className="editor-stacks">
               <div className="panel-card form-placeholder rpg-panel">
@@ -1227,7 +1255,7 @@ const CapturePage = () => {
                             onClick={handleNameSuggestion}
                             disabled={nameLoading || !previewUrl}
                           >
-                            {nameLoading ? '取名中…' : '取名'}
+                            {nameLoading ? '重写中…' : '重写'}
                           </button>
                         </div>
                       </div>
@@ -1260,7 +1288,7 @@ const CapturePage = () => {
                             onClick={handleDescriptionGenerate}
                             disabled={descriptionLoading}
                           >
-                            {descriptionLoading ? '生成中...' : '重生'}
+                            {descriptionLoading ? '生成中...' : '重写'}
                           </button>
                         </div>
                       </div>
@@ -1439,15 +1467,23 @@ const CapturePage = () => {
         </div>
 
         <div className="bottom-actions solo">
+          {saveStatus === 'success' && <span className="save-status">已保存</span>}
           <button
             className="pixel-button primary"
             type="button"
-            onClick={handleSave}
-            disabled={!canSave}
+            onClick={saveStatus === 'success' ? handleDownload : handleSave}
+            disabled={saveStatus === 'success' ? !savedArtwork?.url : !canSave}
           >
-            {saveStatus === 'saving' ? '保存中...' : saveStatus === 'success' ? '已保存' : '保存至珍藏箱'}
+            {saveStatus === 'saving' ? '保存中...' : saveStatus === 'success' ? '下载' : '保存至珍藏箱'}
           </button>
-          {saveMessage && <div className={`save-hint ${saveStatus === 'error' ? 'error' : 'success'}`}>{saveMessage}</div>}
+          {saveStatus === 'success' && (
+            <button className="pixel-button secondary" type="button" onClick={() => navigate('/collection')}>
+              打开珍藏箱
+            </button>
+          )}
+          {saveStatus === 'error' && saveMessage && (
+            <div className="save-hint error">{saveMessage}</div>
+          )}
         </div>
       </div>
     </div>

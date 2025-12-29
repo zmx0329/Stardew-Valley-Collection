@@ -263,7 +263,7 @@ class ImageGenerationService:
 
   async def _assert_public_url(self, url: str) -> None:
     try:
-      async with httpx.AsyncClient(timeout=6.0) as client:
+      async with httpx.AsyncClient(timeout=20.0) as client:
         response = await client.get(url)
       if response.status_code >= 400:
         raise ImageGenerationError(
@@ -340,7 +340,7 @@ class ImageGenerationService:
 
   async def _fetch_image_url(self, url: str) -> str:
     try:
-      async with httpx.AsyncClient(timeout=30.0) as client:
+      async with httpx.AsyncClient(timeout=45.0) as client:
         response = await client.get(url)
       response.raise_for_status()
     except httpx.HTTPStatusError as exc:
@@ -356,7 +356,7 @@ class ImageGenerationService:
 
   async def _post_json(self, endpoint: str, headers: dict, body: dict, params: dict | None = None) -> dict:
     try:
-      async with httpx.AsyncClient(timeout=15.0) as client:
+      async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(endpoint, headers=headers, params=params, json=body)
       response.raise_for_status()
     except httpx.HTTPStatusError as exc:

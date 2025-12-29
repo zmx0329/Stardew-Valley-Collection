@@ -9,6 +9,35 @@ const formatTime = (value: string) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+const sanitizeFilename = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '').trim()
+
+const downloadFromUrl = async (url: string, filename: string) => {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error('下载失败')
+    }
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(objectUrl)
+  } catch {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.target = '_blank'
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  }
+}
+
 const CollectionPage = () => {
   const [artworks, setArtworks] = useState<ArtworkRecord[]>([])
   const [page, setPage] = useState(0)
@@ -30,6 +59,11 @@ const CollectionPage = () => {
     }
     return artworks.length === PAGE_SIZE
   }, [artworks.length, page, totalPages, total])
+
+  const handleDownload = useCallback(async (artwork: ArtworkRecord) => {
+    const fileName = sanitizeFilename(artwork.name || 'artwork') || 'artwork'
+    await downloadFromUrl(artwork.url, `${fileName}.png`)
+  }, [])
 
   const fetchPage = useCallback(
     async (pageIndex: number) => {
@@ -59,7 +93,6 @@ const CollectionPage = () => {
         <header className="collection-header">
           <div className="collection-plaque">
             <span className="plaque-title">珍藏室</span>
-            <span className="plaque-sub">2D 像素 RPG 图鉴风</span>
           </div>
           <div className="collection-actions">
             <div className="pager">
@@ -83,7 +116,7 @@ const CollectionPage = () => {
                 下一页
               </button>
             </div>
-            <Link className="ghost-button" to="/">
+            <Link className="ghost-button" to="/home">
               返回主页
             </Link>
           </div>
@@ -143,6 +176,11 @@ const CollectionPage = () => {
                 <div className="modal-body">
                   <img src={activeArtwork.url} alt={displayName} className="modal-image" />
                   <div className="modal-meta">保存时间：{formatTime(displayDate)}</div>
+                </div>
+                <div className="modal-actions">
+                  <button className="pixel-button primary" type="button" onClick={() => handleDownload(activeArtwork)}>
+                    下载
+                  </button>
                 </div>
               </div>
             </div>

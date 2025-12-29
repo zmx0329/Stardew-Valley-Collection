@@ -1,5 +1,23 @@
+@font-face {
+  font-family: 'Ark Pixel 12';
+  src: url('/fonts/ark-pixel-12px-proportional-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Ark Pixel 12';
+  src: url('/fonts/ark-pixel-12px-proportional-zh_cn.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+FF00-FFEF;
+}
+
 :root {
-  font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Helvetica Neue', sans-serif;
+  font-family: 'Ark Pixel 12', 'Ark Pixel', monospace;
   line-height: 1.6;
   font-weight: 500;
   font-synthesis: none;

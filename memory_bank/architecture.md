@@ -7,16 +7,21 @@
 - `memory_bank/architecture.md`：本文件，概述文件/目录作用（memory_bank 目录仅存放说明文档与设计资产）。
 - `frontend/`：前端工程（Vite + React + TS + React Router，持续迭代星露谷风界面）。
 - `frontend/package.json` / `frontend/package-lock.json`：前端依赖清单，包含 `react-router-dom` 路由与 `zustand` 状态管理；锁文件已生成。
-- `frontend/src/App.tsx`：应用入口与路由配置，提供主页（Home）、捕物页（Capture）、珍藏页（Collection），并将未知路径重定向到主页。
+- `frontend/src/App.tsx`：应用入口与路由配置，新增开场白（Intro）作为默认入口，主页（Home）移动到 `/home`，并提供捕物页（Capture）、珍藏页（Collection），将未知路径重定向到开场白。
+- `frontend/src/pages/intro-page.tsx`：开场白页面，信封背景 + 礼物点击进入黑屏打字机分镜，完成后自动进入主页。
 - `frontend/src/pages/Home.tsx`：主页，背景使用 `public/home-bg.png`，捕物/珍藏按钮热点位于原图按钮位置。
 - `frontend/src/api/client.ts`：前端调用后端接口的轻量封装（检测/文案/生图/保存/列表），读取 `VITE_API_BASE`。
 - `frontend/src/pages/Capture.tsx`：捕物页，2D 像素 RPG 木质室内风；上传后等比压缩到 720–1600px，调用后端生图（失败回退本地像素化）与阿里云检测，0 框空态提示，>20 框分页；物品栏/画布框/表单实时三联动，标签样式复刻 Stardew 橙色卡片（名称/类别/描述/能量/生命填入，含图标和分隔线），支持拖拽与角落把手缩放不越界；描述按钮调用文案服务兜底模板，保存按钮调用 `/save-artwork`（含状态提示）。
 - `frontend/src/pages/Collection.tsx`：珍藏页，木墙背景 + 木牌标题，卡片为木质相框 + 羊皮纸内容，含编号角标、缩略图占位、标题与时间信息，网格整齐排列，hover/按下有像素硬阴影反馈；分页拉取 `/artworks`，支持空态/错误提示与大图查看弹层。
 - `frontend/src/state/capture-store.ts`：Zustand 全局状态模型（上传文件/预览、检测框列表、当前选中框、标签草稿、保存状态），标签草稿按检测框 ID 存储，字段涵盖名称/类别/描述/能量/生命/时间/标签位置比例与缩放；设置检测框时自动计算面积并默认选中最大框。
+- `frontend/src/state/audio-store.ts`：全局音频状态（背景音乐静音与开场白暂停标记）。
 - `frontend/src/state/capture-store.test.ts`：Vitest 验证默认选中最大框与切换选中 ID 的逻辑。
 - `frontend/vite.config.ts`：Vite 配置，启用 React 插件并指定 Vitest 运行环境为 jsdom。
 - `frontend/src/App.css`：全局样式与布局，捕物页采用约 1.6/1.2 栅格，包含像素预览舞台、可点击识别框、可拖拽缩放的橙色 Stardew 标签卡、表盘式时间组件（日期/时间分行）、上传/错误/加载提示、木质表单与数值步进器，以及物品栏缩略图/底部按钮的像素风交互视觉。
 - `frontend/src/index.css`：基础排版与 reset，统一字体和盒模型。
+- `frontend/src/components/background-audio.tsx`：背景音乐组件，随路由/开场白控制播放与恢复。
+- `frontend/src/components/speaker-toggle.tsx`：左上角扬声器按钮，支持静音/取消静音。
+- `frontend/public/music/ConcernedApe - Stardew Valley Overture.mp3`：背景音乐资源文件。
 - `backend/`：后端工程（FastAPI），负责检测、文案生成兜底、像素合成与存储；默认使用本地存储，提供 `/detect`、`/generate-text`、`/generate-image`、`/save-artwork`、`/artworks`、`/health`、`/config/storage`、`/config/image-gen`。
 - `backend/requirements.txt` / `backend/.env.example`：后端依赖与环境变量示例（阿里云 ObjectDet + OSS、文案/生图服务、Supabase、本地存储目录）。
 - `backend/app/main.py`：FastAPI 应用工厂，挂载健康检查、检测/文案/保存/列表路由与存储模式查询。
