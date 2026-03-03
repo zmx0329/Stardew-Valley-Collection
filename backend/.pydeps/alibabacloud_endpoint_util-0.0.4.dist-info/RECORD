@@ -1,0 +1,9 @@
+alibabacloud_endpoint_util-0.0.4.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+alibabacloud_endpoint_util-0.0.4.dist-info/METADATA,sha256=bqrkoK0l3kgkI7vfjV15CubNj5n08S65KGC0stF0kxw,2069
+alibabacloud_endpoint_util-0.0.4.dist-info/RECORD,,
+alibabacloud_endpoint_util-0.0.4.dist-info/WHEEL,sha256=lTU6B6eIfYoiQJTZNc-fyaR6BpL6ehTzU3xGYxn2n8k,91
+alibabacloud_endpoint_util-0.0.4.dist-info/top_level.txt,sha256=SxgZWIi9gxV6ujIETxJc180437X1tKT1-mkqnUPqMQs,27
+alibabacloud_endpoint_util/__init__.py,sha256=b8Tfyn46wV92NWm_uziWVxCW3zTxPV8EyFKcI9HhXcA,23
+alibabacloud_endpoint_util/__pycache__/__init__.cpython-310.pyc,,
+alibabacloud_endpoint_util/__pycache__/client.cpython-310.pyc,,
+alibabacloud_endpoint_util/client.py,sha256=ZdoaGLvMhUnLK1Vt03mw8V4gMp1mVZ5dGqebbgttsJY,850

@@ -1,0 +1,13 @@
+alibabacloud_objectdet20191230-4.0.0.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
+alibabacloud_objectdet20191230-4.0.0.dist-info/LICENSE,sha256=0CFItL6bHvxqS44T6vlLoW2R4Zaic304OO3WxN0oXF0,600
+alibabacloud_objectdet20191230-4.0.0.dist-info/METADATA,sha256=GMoSv3FCKD3TeceimGm5VECFJzlopFuHofsFkLM15GQ,2522
+alibabacloud_objectdet20191230-4.0.0.dist-info/RECORD,,
+alibabacloud_objectdet20191230-4.0.0.dist-info/REQUESTED,sha256=47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU,0
+alibabacloud_objectdet20191230-4.0.0.dist-info/WHEEL,sha256=2wepM1nk4DS4eFpYrW1TTqPcoGNfHhhO_i5m4cOimbo,92
+alibabacloud_objectdet20191230-4.0.0.dist-info/top_level.txt,sha256=cBD5wfsRluuD-O9awe6sGdrfUqduqiK0FenlVhFfQgg,31
+alibabacloud_objectdet20191230/__init__.py,sha256=6C4WlnzpBkuaIQfXufNhBcHodFiDNdiuXZ7W2zngE6U,21
+alibabacloud_objectdet20191230/__pycache__/__init__.cpython-310.pyc,,
+alibabacloud_objectdet20191230/__pycache__/client.cpython-310.pyc,,
+alibabacloud_objectdet20191230/__pycache__/models.cpython-310.pyc,,
+alibabacloud_objectdet20191230/client.py,sha256=MmiplHQyWTFzn3yQTkROCkdsxxtyV75q0ZKvVVgSaFA,124257
+alibabacloud_objectdet20191230/models.py,sha256=DUkH7AMKRWwow40yeVYxQ-jgaT7mzDv85jVxdtR23BE,101347

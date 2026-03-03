@@ -5,6 +5,8 @@
 - `memory_bank/implementation_plan.md`：分步实施与验证计划。
 - `memory_bank/progress.md`：已完成步骤记录。
 - `memory_bank/architecture.md`：本文件，概述文件/目录作用（memory_bank 目录仅存放说明文档与设计资产）。
+- `README.md`：项目总说明文档，覆盖页面功能说明、技术栈与外部模型/API、环境配置、启动方式、接口清单、排障与协作规范。
+- `docs/screenshots/.gitkeep`：README 页面截图占位目录，便于后续补充各功能页面实机图。
 - `frontend/`：前端工程（Vite + React + TS + React Router，持续迭代星露谷风界面）。
 - `frontend/package.json` / `frontend/package-lock.json`：前端依赖清单，包含 `react-router-dom` 路由与 `zustand` 状态管理；锁文件已生成。
 - `frontend/src/App.tsx`：应用入口与路由配置，新增开场白（Intro）作为默认入口，主页（Home）移动到 `/home`，并提供捕物页（Capture）、珍藏页（Collection），将未知路径重定向到开场白。

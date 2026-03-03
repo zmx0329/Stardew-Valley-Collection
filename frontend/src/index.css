@@ -32,10 +32,43 @@
   box-sizing: border-box;
 }
 
+/* Pixel Scrollbar */
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: #2b1d12;
+  border-left: 2px solid #1a1008;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c4a775;
+  border: 2px solid #2b1d12;
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, 0.4), 
+              inset -2px -2px 0 rgba(0, 0, 0, 0.4);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #d4b583;
+}
+
+::-webkit-scrollbar-corner {
+  background: #2b1d12;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
   background: #f4f7fb;
+  /* Ensure cursor style consistency */
+  cursor: default;
+}
+
+/* Global Pixel Rendering for Images */
+img, canvas {
+  image-rendering: pixelated;
 }
 
 a {
