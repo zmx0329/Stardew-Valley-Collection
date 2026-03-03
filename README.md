@@ -4,7 +4,7 @@
 
 - 前端：React + TypeScript + Vite
 - 后端：FastAPI + Pillow
-- 存储：Supabase Storage + Supabase PostgREST（可本地兜底）
+- 存储：Supabase Storage 
 - 模型能力：对象检测、命名、文案、生图
 
 ---
