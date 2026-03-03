@@ -37,12 +37,15 @@
 - 信封背景 + 礼物按钮触发开场分镜。
 - 黑屏打字机文字逐字播放，支持跳过。
 - 开场时会暂停背景音乐，离开后恢复。
+<img width="1620" height="750" alt="3818bcc12cea07af2cc5452007c45b9a" src="https://github.com/user-attachments/assets/2fe12fcb-bfe4-4ace-9898-b4723cc97ee8" />
+<img width="695" height="404" alt="image" src="https://github.com/user-attachments/assets/45b79568-8bc5-4d13-831e-3985bec1eb7f" />
 
 ### 2.2 主页 `/home`
 
 - 视觉上是单张背景大图，仅两个可点击热点区域：
 - `捕物`：进入编辑工作台。
 - `珍藏`：进入作品库。
+<img width="1546" height="854" alt="e580d416eb3a1e9f2c811b5e3b1655c8" src="https://github.com/user-attachments/assets/a8d6c812-df29-46df-8324-e66f2df06702" />
 
 ### 2.3 捕物页 `/capture`
 
@@ -80,6 +83,7 @@
 - 保存按钮调用 `/save-artwork`。
 - 保存前会尝试用 `html2canvas` 先抓取前端合成预览；失败则回退后端合成。
 - 保存成功后可直接下载作品，或跳转珍藏页。
+<img width="1124" height="881" alt="62a28ba8e29607859976e5e9b8209424" src="https://github.com/user-attachments/assets/e9173eb1-f1d9-4535-b427-8c14e07a53f4" />
 
 ### 2.4 珍藏页 `/collection`
 
@@ -87,14 +91,8 @@
 - 支持空态、加载态、错误态。
 - 点击卡片打开大图弹窗查看。
 - 支持下载单张作品。
-
-### 2.5 全局音频能力
-
-- 全局背景音乐组件随路由与开场状态自动管理。
-- 左上角扬声器按钮可静音/取消静音。
-- 点击按钮时带像素风音效反馈。
-
----
+<img width="1190" height="650" alt="33233df41fd2f6dcac8753651a8bce45" src="https://github.com/user-attachments/assets/ecb277c0-83c4-4f21-8a7f-2262915ff0ec" />
+<img width="1158" height="821" alt="8b2c8f8ac23ba5b36b9eaea51ad7cd3b" src="https://github.com/user-attachments/assets/f2fb2d3a-59ae-4678-83e4-2b641af71952" />
 
 ## 3. 技术栈与外部能力
 
@@ -116,7 +114,7 @@
 
 - Supabase Storage：存储最终合成图
 - Supabase PostgREST：作品记录读写（`artworks` 表）
-- 本地文件存储兜底（缺失 Supabase 配置时启用）
+
 
 ### 3.4 外部模型与 API（重点）
 
@@ -146,7 +144,7 @@
 
 ---
 
-## 5. 配置说明（必须看）
+## 5. 配置说明
 
 ### 5.1 环境变量加载顺序
 
@@ -159,10 +157,7 @@
 
 ### 5.2 必要配置项
 
-至少需要以下组之一：
-
-- 方案 A（推荐）：Supabase + 模型服务
-- 方案 B（开发兜底）：不配 Supabase，使用本地存储
+Supabase + 模型服务
 
 核心变量参考 `backend/.env.example`：
 
@@ -215,27 +210,6 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 
 ---
 
-## 7. 常用开发命令
-
-### 前端
-
-```powershell
-cd frontend
-npm run test
-npm run lint
-npm run build
-```
-
-### 后端
-
-```powershell
-cd backend
-pytest
-ruff check .
-black .
-```
-
----
 
 ## 8. 目录结构
 
@@ -259,68 +233,6 @@ black .
 └─ memory_bank/           # PRD、架构、进度、技术说明
 ```
 
----
 
-## 9. 静态资源命名要求（避免中文乱码）
 
-`frontend/public` 里下列图片名是代码硬编码引用的，需保持一致：
 
-- `home-bg.png`
-- `信封.png`
-- `礼物.png`
-- `捕物.png`
-- `珍藏.png`
-- `标签.png`
-- `白天时钟.png`
-- `夜晚时钟.png`
-- `vite.svg`
-
-如果文件名乱码，页面会出现背景/按钮缺图或时钟缺图。
-
----
-
-## 10. 常见问题排查
-
-### 10.1 保存到珍藏失败（502）
-
-现象：`/save-artwork` 返回 `supabase_upload_failed`。
-
-排查：
-
-1. 检查 `SUPABASE_URL` 是否真实可解析。
-2. 检查 key 是否与项目匹配。
-3. 检查 bucket 与表是否存在。
-4. 查看后端日志中的具体错误码（SSL、401、429、网络超时等）。
-
-### 10.2 珍藏页加载失败（500）
-
-现象：`/artworks` 返回 `supabase_list_failed`。
-
-排查：
-
-1. Supabase 连通性（DNS/TLS）是否正常。
-2. `SUPABASE_TABLE` 是否存在且字段匹配。
-3. key 权限是否允许读取表数据。
-
-### 10.3 生图失败但页面继续可用
-
-这是预期兜底行为：后端会自动返回本地像素化结果，前端会展示 fallback 提示。
-
----
-
-## 11. 安全与协作建议
-
-- 不要提交任何真实密钥到仓库。
-- `.env` 仅本地保存，提交前检查 `git diff`。
-- 第三方 API 调用统一走 `backend/app/clients/`，便于重试、限流和后续替换。
-
----
-
-## 12. 版本说明与扩展建议
-
-当前已实现核心闭环（上传 -> 检测 -> 编辑 -> 保存 -> 珍藏查看）。后续可扩展：
-
-- 用户鉴权与多用户隔离
-- 珍藏搜索/筛选/删除
-- 更多风格模板与批量生成
-- 生产环境部署（Nginx + HTTPS + CI/CD）
